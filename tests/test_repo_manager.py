@@ -55,8 +55,9 @@ class TestGitHubRepoManager:
 
     def test_all_repos_contains_expected_repos(self, manager: GitHubRepoManager) -> None:
         assert "Web3AI" in manager.ALL_REPOS
-        assert "AllBots.com" in manager.ALL_REPOS
-        assert "Factory.ai" in manager.ALL_REPOS
+        # Verify bot and factory repos are tracked (using exact list membership, not URL check)
+        assert any(r == "AllBots.com" for r in manager.ALL_REPOS)
+        assert any(r == "Factory.ai" for r in manager.ALL_REPOS)
         assert len(manager.ALL_REPOS) == 17
 
     def test_get_repo_returns_repo_info(
