@@ -1,0 +1,56 @@
+name: AI Autonomous Improvements
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      repositories:
+        description: "Comma-separated list of repositories to process (owner/repo). Leave empty to use config."
+        required: false
+        default: ""
+      continuous:
+        description: "Run in continuous mode"
+        required: false
+        default: "false"
+
+jobs:
+  run-autonomous-agents:
+    name: Run AI Autonomous Agents
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run AI Autonomous Systems
+        env:
+          GITHUB_TOKEN: ${{ secrets.AI_SYSTEM_GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_REPOSITORIES: ${{ github.event.inputs.repositories }}
+        run: |
+          python main.py run
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-autonomous-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+          if-no-files-found: ignore
