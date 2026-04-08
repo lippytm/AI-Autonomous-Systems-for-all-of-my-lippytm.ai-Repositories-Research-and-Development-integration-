@@ -1,0 +1,91 @@
+# AI Autonomous Systems Configuration
+
+# GitHub Integration
+github:
+  # Set via environment variable GITHUB_TOKEN
+  token: ""
+  # Comma-separated list of repositories to monitor (owner/repo format)
+  # Example: "lippytm/my-repo,lippytm/another-repo"
+  # Leave empty to use GITHUB_REPOSITORIES env var
+  repositories: []
+  # Default branch for pull requests
+  default_branch: "main"
+  # Labels to apply to AI-generated PRs
+  pr_labels:
+    - "ai-autonomous"
+    - "automated-improvement"
+
+# AI Model Integration
+ai:
+  # Provider: "openai" or "anthropic"
+  provider: "openai"
+  # Model to use for analysis and generation
+  model: "gpt-4o"
+  # Maximum tokens per request
+  max_tokens: 4096
+  # Temperature (0.0 - 1.0)
+  temperature: 0.2
+  # Number of retries on API failure
+  max_retries: 3
+
+# Agent Settings
+agents:
+  # Code Improvement Agent
+  code_improvement:
+    enabled: true
+    # File extensions to analyze
+    target_extensions:
+      - ".py"
+      - ".js"
+      - ".ts"
+      - ".go"
+      - ".java"
+    # Maximum files to process per run
+    max_files_per_run: 10
+    # Minimum lines of code to trigger improvement suggestions
+    min_lines: 5
+    # Create PRs automatically or just report findings
+    auto_pr: false
+
+  # Repository Management Agent
+  repository:
+    enabled: true
+    # Check for missing standard files
+    check_missing_files:
+      - "README.md"
+      - ".gitignore"
+      - "LICENSE"
+    # Update dependency files automatically
+    auto_update_dependencies: false
+    # Create issues for findings
+    create_issues: true
+
+  # Research Agent
+  research:
+    enabled: true
+    # Topics to research for improvements
+    research_topics:
+      - "best practices"
+      - "security vulnerabilities"
+      - "performance optimizations"
+    # Maximum number of research tasks per run
+    max_tasks_per_run: 5
+
+# Orchestrator Settings
+orchestrator:
+  # Run interval in seconds (used when running as daemon)
+  run_interval: 3600
+  # Maximum concurrent agents
+  max_concurrent_agents: 3
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+  # Output directory for reports
+  reports_dir: "reports"
+
+# Notifications
+notifications:
+  # Create GitHub issues for critical findings
+  github_issues: true
+  # Issue assignees (GitHub usernames)
+  assignees:
+    - "lippytm"
