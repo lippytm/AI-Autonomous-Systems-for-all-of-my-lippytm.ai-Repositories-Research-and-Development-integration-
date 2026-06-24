@@ -1,0 +1,106 @@
+github:
+  username: lippytm
+  token: ${GITHUB_TOKEN}
+  repositories:
+    - name: Transparency-Logic-Time-Machine-Bots-
+      description: The Grand United Fields of Theories
+      language: TypeScript
+      tags: [bots, logic, time-machine, typescript]
+    - name: Web3AI
+      description: Web3 AI integration platform
+      language: Python
+      tags: [web3, ai, blockchain, python]
+    - name: AllBots.com
+      description: Bots management and automations with embedded GitHub
+      language: ""
+      tags: [bots, automation, management]
+    - name: AI-Full-Stack-AI-DevOps-Synthetic-Intelligence-Engines-AgentsBots-Web3-Websites-
+      description: AI Web3 Websites with full DevOps integration
+      language: TypeScript
+      tags: [ai, web3, devops, typescript, full-stack]
+    - name: gatsby-starter-blog
+      description: Gatsby blog starter with AI enhancements
+      language: JavaScript
+      tags: [gatsby, blog, javascript]
+    - name: Chatlippytm.ai.Bots
+      description: AI Hub for Building Business of businesses
+      language: Python
+      tags: [chat, ai, bots, python, business]
+    - name: lippytm-lippytm.ai-tower-control-ai
+      description: Control tower for OpenAI ChatGPT integrated interfaces
+      language: JavaScript
+      tags: [control-tower, openai, javascript, integration]
+    - name: The-Encyclopedia-of-Everything-Applied-ChatAIBots
+      description: Instruction manual for DIY programming and blockchain development
+      language: ""
+      tags: [encyclopedia, chatbots, education, blockchain]
+    - name: Time-Machines-Builders-
+      description: AI automation in Earn while you Learn
+      language: TypeScript
+      tags: [time-machine, ai, typescript, automation]
+    - name: lippytm.ai
+      description: AI Web3AI connection Hub
+      language: ""
+      tags: [hub, web3, ai, connection]
+    - name: AI-Time-Machines
+      description: Adding AI Agents to everything with Time Machines
+      language: JavaScript
+      tags: [ai, time-machine, javascript, agents]
+    - name: AllBots.com.ai
+      description: AllBots.com with Factory.ai connections
+      language: ""
+      tags: [bots, ai, factory, automation]
+    - name: Factory.ai
+      description: Factory.ai workflows connections to GitHub, ChatGPT, AllBots.com
+      language: Python
+      tags: [factory, ai, workflows, python]
+    - name: OpenClaw-lippytm.AI-
+      description: Personal AI Assistant Creation Networking Platform
+      language: ""
+      tags: [assistant, ai, networking, platform]
+    - name: AI-Autonomous-Systems-for-all-of-my-lippytm.ai-Repositories-Research-and-Development-integration-
+      description: AI Research and Development and autonomous Systems (this repo)
+      language: Python
+      tags: [autonomous, research, development, integration]
+    - name: AI-Intergalactic-Zoological-Social-Multimedia-Agency-Networks-
+      description: Intergalactic Zoological Society Systems Networks
+      language: ""
+      tags: [ai, networks, social, multimedia]
+    - name: Evolutionary-Evolutions-Social-Multimedia-Networks-Agency-
+      description: Global Social Networks for Educational and Business Technologies
+      language: ""
+      tags: [social, networks, education, business, blockchain]
+
+ai:
+  provider: openai
+  model: gpt-4o
+  temperature: 0.7
+  max_tokens: 4096
+  fallback_model: gpt-3.5-turbo
+
+web3:
+  network: ethereum
+  rpc_url: ${WEB3_RPC_URL}
+  chain_id: 1
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  debug: false
+  reload: false
+
+orchestrator:
+  sync_interval_minutes: 60
+  research_interval_hours: 24
+  content_interval_hours: 12
+  ad_check_interval_hours: 6
+  max_concurrent_agents: 5
+
+quality:
+  min_code_coverage: 0.80
+  max_open_issues_warning: 20
+  stale_days_threshold: 30
+
+logging:
+  level: INFO
+  format: json
