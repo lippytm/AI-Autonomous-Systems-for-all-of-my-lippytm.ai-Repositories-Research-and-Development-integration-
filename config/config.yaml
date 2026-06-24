@@ -1,0 +1,53 @@
+# Autonomous Systems Platform — Configuration
+# Copy this file and fill in your values. Never commit secrets.
+
+system:
+  name: "lippytm.ai Autonomous Systems"
+  version: "1.0.0"
+  log_level: "INFO"          # DEBUG | INFO | WARNING | ERROR
+  dry_run: false             # Set true to preview actions without executing
+
+content:
+  # Platforms to publish content to
+  platforms:
+    - "blog"
+    - "social_media"
+    - "youtube"
+  schedule_interval_minutes: 60
+  max_items_per_run: 5
+  topics:
+    - "AI research"
+    - "autonomous systems"
+    - "machine learning"
+    - "software development"
+
+advertising:
+  enabled: true
+  schedule_interval_minutes: 120
+  max_campaigns_per_run: 3
+  budget_limit_usd: 100.0
+  target_platforms:
+    - "google_ads"
+    - "social_media"
+
+research:
+  enabled: true
+  schedule_interval_minutes: 240
+  sources:
+    - "arxiv"
+    - "github_trending"
+  output_directory: "research_output"
+
+quality:
+  enabled: true
+  schedule_interval_minutes: 30
+  checks:
+    - "lint"
+    - "test"
+    - "coverage"
+  coverage_threshold: 80       # Minimum acceptable test coverage (%)
+
+integration:
+  github:
+    org: "lippytm"
+    repositories: []           # Leave empty to auto-discover
