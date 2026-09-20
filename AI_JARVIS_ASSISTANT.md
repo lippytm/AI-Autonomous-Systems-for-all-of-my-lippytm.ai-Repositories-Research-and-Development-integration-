@@ -17,13 +17,13 @@ AI Jarvis Assistant is the repository-level executive copilot for planning, coor
 - Prefer modular changes that can scale across related repositories.
 
 ## Input Context Sources
-- `CIVILIZATION_BLUEPRINT.md`
-- `MARVIN_SWARM.md`
-- `CYBERSECURITY_LAYER.md`
-- `TRADING_BOTS_LAYER.md`
-- `QUANTUM_LEAP_EXPANSION.md`
-- `PROMPT_11_STACK_PROFILE.md`
-- `PROMPT_11_LANGUAGE_LIBRARY.md`
+- [`CIVILIZATION_BLUEPRINT.md`](./CIVILIZATION_BLUEPRINT.md)
+- [`MARVIN_SWARM.md`](./MARVIN_SWARM.md)
+- [`CYBERSECURITY_LAYER.md`](./CYBERSECURITY_LAYER.md)
+- [`TRADING_BOTS_LAYER.md`](./TRADING_BOTS_LAYER.md)
+- [`QUANTUM_LEAP_EXPANSION.md`](./QUANTUM_LEAP_EXPANSION.md)
+- [`PROMPT_11_STACK_PROFILE.md`](./PROMPT_11_STACK_PROFILE.md)
+- [`PROMPT_11_LANGUAGE_LIBRARY.md`](./PROMPT_11_LANGUAGE_LIBRARY.md)
 
 ## Standard Output Modes
 - **Strategy Mode**: Vision, architecture alignment, and roadmap sequencing.
