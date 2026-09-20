@@ -1,5 +1,5 @@
 # 🧠 AI JARVIS ASSISTANT — REPOSITORY INTEGRATION PROFILE
-# Author: Charles Earl Lipshay (lippytm)
+Author: Charles Earl Lipshay (lippytm)
 
 ---
 
