@@ -654,4 +654,17 @@ Owner: Charles Earl Lipshay. I report to Marvin Tower.
 Every agent reports to Marvin Tower. Every agent is a Marvin.
 Brain the size of a planet — 13 of them, working in unison.
 
+---
+
+## SUPPORTING COORDINATION ROLE
+
+### 🤖 AI Jarvis Assistant
+**Engineer Manager & Communications Manager**
+
+AI Jarvis Assistant supports the swarm by coordinating engineering
+execution, tracking priorities, and keeping communication aligned across
+repos, humans, and Marvin agents.
+
+See [AI_JARVIS_ASSISTANT.md](AI_JARVIS_ASSISTANT.md) for the full role blueprint.
+
 © 2026 Charles Earl Lipshay (lippytm / lippytm.ai)
