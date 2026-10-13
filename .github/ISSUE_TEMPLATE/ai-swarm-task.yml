@@ -1,0 +1,66 @@
+name: AI swarm task
+description: Create a scoped, reviewable task for an AI assistant or swarm.
+title: "[Swarm] "
+body:
+  - type: input
+    id: business
+    attributes:
+      label: Business or product
+      description: Name the business or product this task serves.
+      placeholder: Business / product
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: Repository and scope
+      description: Name the repository and list the relevant paths or issue/PR.
+      placeholder: owner/repository, paths, issue or PR
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result, not just the activity.
+      placeholder: What should be true when this task is complete?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria and validation
+      description: State how a reviewer can verify the result.
+      placeholder: Tests, checks, or observable evidence
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 Critical
+        - P1 High
+        - P2 Normal
+        - P3 Low
+    validations:
+      required: true
+  - type: dropdown
+    id: permission
+    attributes:
+      label: Permission level
+      description: Start with the narrowest access that is sufficient.
+      options:
+        - Read-only analysis
+        - Draft a branch and pull request
+        - External or production action requires explicit human approval
+    validations:
+      required: true
+  - type: textarea
+    id: next_action
+    attributes:
+      label: Next action and handoff
+      description: Name the next concrete step and any owner decision needed.
+      placeholder: Next step, owner, blockers
+    validations:
+      required: true
