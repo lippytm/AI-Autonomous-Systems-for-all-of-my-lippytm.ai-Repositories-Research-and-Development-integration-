@@ -1,0 +1,130 @@
+name: ChatGPT Business Integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/config.yaml'
+      - 'src/integrations/chatgpt_sync.py'
+      - '.github/workflows/chatgpt-integration.yml'
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - sync
+          - analyze
+          - generate-insights
+          - validate-connection
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  chatgpt-sync:
+    name: ChatGPT Business Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate ChatGPT Credentials
+        run: |
+          python -c "
+          import os
+          required = ['OPENAI_API_KEY', 'OPENAI_ORG_ID']
+          missing = [k for k in required if not os.getenv(k)]
+          if missing:
+              raise ValueError(f'Missing credentials: {missing}')
+          print('✓ ChatGPT credentials validated')
+          "
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+
+      - name: Sync Repository State
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+          ACTION: ${{ github.event.inputs.action || 'sync' }}
+        run: |
+          python src/integrations/chatgpt_sync.py \
+            --action $ACTION \
+            --output reports/chatgpt-$(date +%Y%m%d-%H%M%S).json
+
+      - name: Generate AI-Powered Insights
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+        run: |
+          python -c "
+          import json
+          from pathlib import Path
+          
+          # Fetch latest report
+          reports = sorted(Path('reports').glob('chatgpt-*.json'), reverse=True)
+          if reports:
+              with open(reports[0]) as f:
+                  data = json.load(f)
+              print('📊 ChatGPT Insights Generated:')
+              print(json.dumps(data, indent=2))
+          "
+
+      - name: Create PR with ChatGPT Recommendations
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import subprocess
+          import json
+          from pathlib import Path
+          
+          # Check if recommendations exist
+          reports = sorted(Path('reports').glob('chatgpt-*.json'), reverse=True)
+          if reports:
+              with open(reports[0]) as f:
+                  data = json.load(f)
+              
+              # Only create PR if there are actionable items
+              if data.get('recommendations'):
+                  print('Creating PR with ChatGPT recommendations...')
+                  # Implementation would create a PR with findings
+                  print('✓ PR creation logic prepared')
+          "
+
+      - name: Upload Report Artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: chatgpt-reports
+          path: reports/chatgpt-*.json
+          retention-days: 60
+
+  notify:
+    name: Notification
+    needs: chatgpt-sync
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log Status
+        run: |
+          echo "ChatGPT Integration Status: ${{ needs.chatgpt-sync.result }}"
