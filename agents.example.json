@@ -1,0 +1,16 @@
+{
+  "agents": [
+    {
+      "id": "jarvis-tower",
+      "url": "https://tower.example.invalid/chatgpt/tasks",
+      "token_env": "JARVIS_TOWER_TOKEN",
+      "description": "Tower coordinator adapter for an explicitly selected repository"
+    },
+    {
+      "id": "jarvis-factory",
+      "url": "https://factory.example.invalid/chatgpt/tasks",
+      "token_env": "JARVIS_FACTORY_TOKEN",
+      "description": "Factory planning adapter; human approval required for changes"
+    }
+  ]
+}
