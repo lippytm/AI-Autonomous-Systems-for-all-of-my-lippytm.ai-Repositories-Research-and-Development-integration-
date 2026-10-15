@@ -1,0 +1,95 @@
+name: AI Autonomous Improvements
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Target repository (optional; format: owner/repo)'
+        required: false
+        type: string
+      mode:
+        description: 'Run mode'
+        required: true
+        default: 'once'
+        type: choice
+        options:
+          - once
+          - qa
+          - content
+          - research
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  autonomous-improvements:
+    name: Run Autonomous Systems
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run AI Autonomous Framework
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+          AI_PROVIDER: openai
+          TARGET_REPO: ${{ github.event.inputs.repo }}
+          RUN_MODE: ${{ github.event.inputs.mode || 'once' }}
+        run: |
+          python main.py run \
+            --mode $RUN_MODE \
+            ${TARGET_REPO:+--repo $TARGET_REPO} \
+            --output reports/autonomous-$(date +%Y%m%d-%H%M%S).json
+
+      - name: Upload Reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: autonomous-reports
+          path: reports/
+          retention-days: 30
+
+      - name: Create Issues from Findings
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import json
+          import os
+          from pathlib import Path
+          
+          reports_dir = Path('reports')
+          if reports_dir.exists():
+              for report_file in sorted(reports_dir.glob('*.json'), reverse=True)[:1]:
+                  with open(report_file) as f:
+                      data = json.load(f)
+                  print(f'Processing report: {report_file}')
+                  print(f'Found {len(data.get(\"findings\", []))} findings')
+          "
+
+      - name: Slack Notification (Optional)
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'AI Autonomous Improvements workflow failed'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true
