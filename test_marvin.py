@@ -27,10 +27,14 @@ class RepositoryScanTests(unittest.TestCase):
             (repository / ".git").mkdir()
             with patch("marvin.subprocess.run") as git_status:
                 git_status.return_value.returncode = 0
-                git_status.return_value.stdout = "## main\n"
+                git_status.return_value.stdout = "## main\n M tracked.txt\n"
                 report = marvin.scan(repository)
 
             self.assertEqual(report["repository_count"], 1)
+            self.assertEqual(
+                report["repositories"][0]["git_status"],
+                "has-uncommitted-changes",
+            )
             checks = {
                 finding["check"]
                 for finding in report["repositories"][0]["findings"]

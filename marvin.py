@@ -159,7 +159,12 @@ def inspect_repository(repository):
                 }
             )
         else:
-            git_status = result.stdout.strip().splitlines()[0] if result.stdout.strip() else "clean"
+            status_lines = result.stdout.strip().splitlines()
+            git_status = (
+                "has-uncommitted-changes"
+                if len(status_lines) > 1
+                else "clean"
+            )
     except (OSError, subprocess.TimeoutExpired):
         git_status = "unavailable"
         findings.append(
