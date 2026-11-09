@@ -336,9 +336,12 @@ class PreventionTests(unittest.TestCase):
                     "      - run: |\n"
                     "          echo 'a && python quoted.py'\n"
                     "          echo \"done\"; python real-missing.py\n"
-                    "      - run: \"python yaml-quoted-missing.py\"\n")
+                    "      - run: \"python yaml-quoted-missing.py\"\n"
+                    "      - run: python \"quoted-name-missing.py\"\n"
+                    "      - run: pip install -r 'quoted-reqs-missing.txt'\n"
+                    "      - run: echo \"unterminated; python never.py\n")
             found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
-        self.assertEqual([("missing-referenced-file", 5), ("missing-referenced-file", 6)], found)
+        self.assertEqual([("missing-referenced-file", n) for n in (5, 6, 7, 8)], found)
 
     def test_dynamic_working_directory_is_not_guessed(self):
         from swarm_hub.prevent import scan_text

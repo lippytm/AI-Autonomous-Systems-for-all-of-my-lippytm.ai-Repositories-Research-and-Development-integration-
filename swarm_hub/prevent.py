@@ -170,6 +170,17 @@ _FILE_REFS = re.compile(r"(?:^|&&|\|\||;|\|)\s*(?:pip3? install(?: [^\n;&|]*?)? 
 _SHELL_COMMENT = re.compile(r"(^|\s)#.*$")  # `cmd # note` and whole-line comments
 # Quoted shell text is an argument, never a command: separators inside it don't count.
 _SHELL_QUOTED = re.compile(r'"(?:\\.|[^"\\])*"?|\'[^\']*\'?')
+
+
+def _unquote_without_separators(match: re.Match[str]) -> str:
+    """Keep quoted words (so `python "x.py"` is still checked) but drop the
+    separators inside them (so `echo "a; python x.py"` never starts a command)."""
+    text = match.group(0)
+    quote = text[0]
+    inner = text[1:-1] if len(text) > 1 and text.endswith(quote) else text[1:]
+    return re.sub(r"[;&|]", " ", inner)
+
+
 _CHANGES_DIR = re.compile(r"(^|[\s;&|])(cd|pushd)\s")
 _RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
 
@@ -263,7 +274,7 @@ def _check_missing_files(text, root):
         # blocking error must not guess, so those commands are skipped.
         if "${{" in command or _CHANGES_DIR.search(command):
             continue
-        refs = _FILE_REFS.findall(_SHELL_QUOTED.sub("_", command))
+        refs = _FILE_REFS.findall(_SHELL_QUOTED.sub(_unquote_without_separators, command))
         if not refs:
             continue
         workdir = _effective_workdir(lines, n, spans)
