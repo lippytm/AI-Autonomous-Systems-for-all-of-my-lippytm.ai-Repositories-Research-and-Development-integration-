@@ -167,6 +167,7 @@ def _check_sarif_permission(text, root):
 # text or after && || ; |. Text such as `echo "python x.py"` is not a command.
 _FILE_REFS = re.compile(r"(?:^|&&|\|\||;|\|)\s*(?:pip3? install(?: [^\n;&|]*?)? -r|python3? )"
                         r"\s*([\w./-]+\.(?:txt|py))\b")
+_SHELL_COMMENT = re.compile(r"(^|\s)#.*$")  # `cmd # note` and whole-line comments
 _RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
 
 
@@ -179,7 +180,7 @@ def _run_commands(lines: list[str]) -> list[tuple[int, str]]:
         if not m:
             i += 1
             continue
-        value = m.group(2).split(" #")[0].strip()
+        value = _SHELL_COMMENT.sub("", m.group(2)).strip()
         if value and value[0] not in "|>":
             out.append((i, value.strip("'\"")))
             i += 1
@@ -187,8 +188,9 @@ def _run_commands(lines: list[str]) -> list[tuple[int, str]]:
         key_indent = len(m.group(1))
         i += 1
         while i < len(lines) and (not lines[i].strip() or _indent(lines[i]) > key_indent):
-            if lines[i].strip() and not lines[i].strip().startswith("#"):
-                out.append((i, lines[i].strip()))
+            command = _SHELL_COMMENT.sub("", lines[i]).strip()
+            if command:
+                out.append((i, command))
             i += 1
     return out
 

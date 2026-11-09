@@ -306,11 +306,12 @@ class PreventionTests(unittest.TestCase):
                     "        run: echo \"Use python example.py\"\n"
                     "      - run: |\n"
                     "          echo python also-missing.py\n"
+                    "          make # note; python commented-out.py\n"
                     "          make deps && python real-missing.py\n"
                     "          cd app && python resolved-elsewhere.py\n"
                     "      - run: python one-line-missing.py\n")
             found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
-        self.assertEqual([("missing-referenced-file", 6), ("missing-referenced-file", 8)], found)
+        self.assertEqual([("missing-referenced-file", 7), ("missing-referenced-file", 9)], found)
 
     def test_files_resolve_against_each_steps_own_working_directory(self):
         from swarm_hub.prevent import scan_text
