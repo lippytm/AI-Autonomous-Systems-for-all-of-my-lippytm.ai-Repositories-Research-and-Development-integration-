@@ -160,12 +160,13 @@ def _health(args):
 def _prs(args):
     fleet, gh, today = load_fleet(), GitHub(), date.today()
     agents = [fleet.get(args.repo)] if args.repo else list(fleet)
-    rows = []
+    rows, failed = [], []
     for agent in agents:
         try:
             pulls = gh.open_pulls(fleet.owner, agent.repo, settle_seconds=args.settle)
         except GitHubError as exc:
             print(f"{agent.id}: {exc}", file=sys.stderr)
+            failed.append(agent.id)
             continue
         for pr in pulls:
             verdict = triage(pr, today)
@@ -179,6 +180,9 @@ def _prs(args):
         for r in rows:
             print(f"{r['action']:18} {r['agent']}#{r['number']:<4} {r['title'][:70]}  ({r['reason']})")
         print("\n" + ", ".join(f"{k}={v}" for k, v in Counter(r["action"] for r in rows).items()))
+    if failed:
+        print(f"Incomplete: could not read {', '.join(failed)}", file=sys.stderr)
+        return 1
     return 0
 
 

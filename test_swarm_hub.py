@@ -121,6 +121,9 @@ class PlaybookTests(unittest.TestCase):
                 playbook.learn(lesson)
             with self.assertRaisesRegex(ValueError, "own example"):
                 playbook.learn(Pattern("bad-lesson", "xyz", "d", "f", "node", "blocking", "abc"))
+            with self.assertRaisesRegex(ValueError, "missing fix"):
+                playbook.learn(Pattern("empty-fix", "abc", "d", " ", "node", "blocking", "abc"))
+            self.assertEqual("npm-ci-lockfile", load_playbook(path).patterns[-1].id)
         with self.assertRaises(ValueError):
             Pattern("ok-id", "(", "d", "f", "c", "blocking", "e")
         with self.assertRaises(ValueError):
@@ -159,6 +162,19 @@ class TriageTests(unittest.TestCase):
         for case, expected in cases:
             with self.subTest(expected=expected, case=case):
                 self.assertEqual(expected, triage(case, TODAY).action)
+
+
+class PrsCommandTests(unittest.TestCase):
+    def test_incomplete_scan_fails(self):
+        def broken(*args, **kwargs):
+            raise GitHubError("GET /x -> HTTP 403")
+
+        out, err = io.StringIO(), io.StringIO()
+        with patch("swarm_hub.cli.GitHub.open_pulls", broken), redirect_stdout(out), \
+                patch("sys.stderr", err):
+            self.assertEqual(1, main(["prs", "--repo", "factory", "--json"]))
+        self.assertEqual([], json.loads(out.getvalue()))
+        self.assertIn("Incomplete: could not read factory", err.getvalue())
 
 
 class Response:
@@ -255,13 +271,39 @@ class PreventionTests(unittest.TestCase):
         )
         self.assertEqual([], scan_text(fixed, "ci.yml", Path(".")))
 
-    def test_existing_files_and_working_directory_are_respected(self):
+    def test_files_resolve_against_each_steps_own_working_directory(self):
         from swarm_hub.prevent import scan_text
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "backend").mkdir()
-            (Path(tmp) / "backend" / "requirements.txt").write_text("")
-            text = "      working-directory: backend\n      run: pip install -r requirements.txt\n"
-            self.assertEqual([], scan_text(text, "ci.yml", Path(tmp)))
+            root = Path(tmp)
+            (root / "backend").mkdir()
+            (root / "frontend").mkdir()
+            (root / "backend" / "requirements.txt").write_text("")
+            (root / "requirements.txt").write_text("")
+            text = ("    steps:\n"
+                    "      - name: backend deps\n"
+                    "        working-directory: backend\n"
+                    "        run: pip install -r requirements.txt\n"
+                    "      - name: frontend deps\n"
+                    "        working-directory: frontend\n"
+                    "        run: |\n"
+                    "          pip install -r requirements.txt\n"
+                    "      - name: root deps\n"
+                    "        run: pip install -r requirements.txt\n")
+            found = scan_text(text, "ci.yml", root)
+        self.assertEqual([("missing-referenced-file", 8)], [(f.rule, f.line) for f in found])
+
+    def test_job_defaults_working_directory_applies_to_steps(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app").mkdir()
+            (root / "app" / "requirements.txt").write_text("")
+            text = ("jobs:\n  test:\n    defaults:\n      run:\n        working-directory: app\n"
+                    "    steps:\n      - run: pip install -r requirements.txt\n")
+            self.assertEqual([], scan_text(text, "ci.yml", root))
+            (root / "app" / "requirements.txt").unlink()
+            (root / "requirements.txt").write_text("")
+            self.assertEqual(["missing-referenced-file"], [f.rule for f in scan_text(text, "ci.yml", root)])
 
     def test_this_repository_has_no_prevention_errors(self):
         from swarm_hub.prevent import scan_repository
@@ -326,13 +368,22 @@ class TrainingTests(unittest.TestCase):
         kinds = [d["meta"]["kind"] for d in data]
         self.assertEqual(len(playbook.patterns), kinds.count("diagnose"))
         self.assertEqual(len(RULES), kinds.count("prevent"))
-        self.assertEqual(len(RULES), kinds.count("no-problem"))
+        self.assertEqual(sum(r.source_fix for r in RULES), kinds.count("no-problem"))
         self.assertEqual(len(GUARDRAILS), kinds.count("guardrail"))
         from swarm_hub.prevent import AUTOFIXES
         self.assertEqual(len(AUTOFIXES), kinds.count("autofix"))
         for item in data:
             self.assertEqual(["system", "user", "assistant"], [m["role"] for m in item["messages"]])
             self.assertTrue(all(m["content"].strip() for m in item["messages"]))
+
+    def test_setting_only_rules_never_teach_removing_the_check(self):
+        from swarm_hub.training import examples
+        for item in examples(load_playbook()):
+            if item["meta"].get("rule") == "dependency-review-needs-setting":
+                answer = item["messages"][2]["content"]
+                self.assertNotIn("Corrected", answer)
+                self.assertNotIn("actions/checkout", answer)
+                self.assertIn("Keep this step", answer)
 
     def test_committed_dataset_is_up_to_date(self):
         from swarm_hub.training import examples, to_jsonl

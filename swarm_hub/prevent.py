@@ -39,6 +39,9 @@ class Rule:
     bad: str
     good: str
     check: Callable[[str, Path | None], list[tuple[int, str]]]
+    # False when the fix is a repository setting, not a source edit; ``good`` is
+    # then only a detector-negative fixture and must never be taught as a repair.
+    source_fix: bool = True
 
 
 def _uses(text: str, pattern: str) -> list[tuple[int, str]]:
@@ -83,17 +86,64 @@ def _check_sarif_permission(text, root):
 _FILE_REFS = re.compile(r"(?:pip3? install(?: [^\n]*?)? -r|python3? )\s*([\w./-]+\.(?:txt|py))\b")
 
 
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+_STEP = re.compile(r"^(\s*)-\s+\S")
+_WORKDIR = re.compile(r"^\s*working-directory:\s*['\"]?([\w./-]+)")
+
+
+def _step_spans(lines: list[str]) -> list[tuple[int, int]]:
+    """(start, end) index pairs for every list item that looks like a step."""
+    spans = []
+    for i, line in enumerate(lines):
+        m = _STEP.match(line)
+        if not m:
+            continue
+        indent, end = len(m.group(1)), len(lines)
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() and _indent(lines[j]) <= indent:
+                end = j
+                break
+        spans.append((i, end))
+    return spans
+
+
+def _effective_workdir(lines: list[str], index: int, spans: list[tuple[int, int]]) -> str | None:
+    """The working directory a command on ``lines[index]`` really runs in."""
+    enclosing = [s for s in spans if s[0] <= index < s[1]]
+    if enclosing:
+        start, end = max(enclosing)  # innermost step
+        for j in range(start, end):
+            m = _WORKDIR.match(lines[j])
+            if m:
+                return m.group(1)
+    inside_steps = {j for s, e in spans for j in range(s, e)}
+    for j in range(index - 1, -1, -1):  # nearest job- or workflow-level default above
+        if j not in inside_steps:
+            m = _WORKDIR.match(lines[j])
+            if m:
+                return m.group(1)
+    return None
+
+
 def _check_missing_files(text, root):
     if root is None:
         return []
-    dirs = [root] + [root / d for d in re.findall(r"working-directory:\s*['\"]?([\w./-]+)", text)]
+    lines = text.splitlines()
+    spans = _step_spans(lines)
     hits = []
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in enumerate(lines):
         if line.strip().startswith("#") or "${{" in line:
             continue
-        for ref in _FILE_REFS.findall(line):
-            if not any((d / ref).exists() for d in dirs):
-                hits.append((n, line.strip()))
+        refs = _FILE_REFS.findall(line)
+        if not refs:
+            continue
+        workdir = _effective_workdir(lines, n, spans)
+        base = root / workdir if workdir else root
+        if any(not (base / ref).exists() for ref in refs):
+            hits.append((n + 1, line.strip()))
     return hits
 
 
@@ -145,7 +195,7 @@ RULES = [
          "otherwise every PR fails it.",
          "Confirm Settings > Code security > Dependency graph is on (free for public repos).",
          "      - uses: actions/dependency-review-action@v4\n", "      - uses: actions/checkout@v4\n",
-         _check_dependency_review),
+         _check_dependency_review, source_fix=False),
 ]
 
 

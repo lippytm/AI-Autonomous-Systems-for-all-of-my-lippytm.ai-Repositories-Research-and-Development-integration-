@@ -59,16 +59,20 @@ def _example(kind: str, user: str, assistant: str, **meta) -> dict:
 
 
 def _rule_examples(rule: Rule) -> Iterator[dict]:
-    yield _example(
-        "prevent",
-        f"Review this GitHub Actions workflow excerpt before it runs:\n\n```yaml\n{rule.bad}```",
-        f"Problem ({rule.severity}): {rule.message}\nFix: {rule.fix}\n\nCorrected:\n```yaml\n{rule.good}```",
-        rule=rule.id, prevents=rule.prevents)
-    yield _example(
-        "no-problem",
-        f"Review this GitHub Actions workflow excerpt before it runs:\n\n```yaml\n{rule.good}```",
-        f"No problem found for '{rule.id}'. This excerpt is already correct.",
-        rule=rule.id)
+    review = f"Review this GitHub Actions workflow excerpt before it runs:\n\n```yaml\n{rule.bad}```"
+    if rule.source_fix:
+        answer = (f"Problem ({rule.severity}): {rule.message}\nFix: {rule.fix}\n\n"
+                  f"Corrected:\n```yaml\n{rule.good}```")
+    else:
+        answer = (f"Note ({rule.severity}): {rule.message}\nFix: {rule.fix}\n\n"
+                  "Keep this step exactly as it is: the fix is a repository setting, not a code change.")
+    yield _example("prevent", review, answer, rule=rule.id, prevents=rule.prevents)
+    if rule.source_fix:  # a setting-only rule's "good" fixture is not a lesson to teach
+        yield _example(
+            "no-problem",
+            f"Review this GitHub Actions workflow excerpt before it runs:\n\n```yaml\n{rule.good}```",
+            f"No problem found for '{rule.id}'. This excerpt is already correct.",
+            rule=rule.id)
 
 
 def examples(playbook: Playbook, rules: list[Rule] = RULES) -> list[dict]:

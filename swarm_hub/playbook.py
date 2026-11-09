@@ -76,6 +76,9 @@ class Playbook:
 
     def learn(self, pattern: Pattern, save: bool = True) -> None:
         """Add a lesson. It must recognise its own example before it is accepted."""
+        missing = [name for name in _REQUIRED if not str(getattr(pattern, name)).strip()]
+        if missing:
+            raise ValueError(f"{pattern.id}: missing {', '.join(missing)}")
         if any(p.id == pattern.id for p in self.patterns):
             raise ValueError(f"Pattern already known: {pattern.id}")
         if not pattern.regex.search(pattern.example):
