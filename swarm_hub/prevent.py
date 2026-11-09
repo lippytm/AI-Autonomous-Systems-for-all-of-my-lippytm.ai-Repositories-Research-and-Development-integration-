@@ -168,6 +168,7 @@ def _check_sarif_permission(text, root):
 _FILE_REFS = re.compile(r"(?:^|&&|\|\||;|\|)\s*(?:pip3? install(?: [^\n;&|]*?)? -r|python3? )"
                         r"\s*([\w./-]+\.(?:txt|py))\b")
 _SHELL_COMMENT = re.compile(r"(^|\s)#.*$")  # `cmd # note` and whole-line comments
+_CHANGES_DIR = re.compile(r"(^|[\s;&|])(cd|pushd)\s")
 _RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
 
 
@@ -187,9 +188,12 @@ def _run_commands(lines: list[str]) -> list[tuple[int, str]]:
             continue
         key_indent = len(m.group(1))
         i += 1
+        moved = False  # after cd/pushd the rest of this script runs somewhere unknown
         while i < len(lines) and (not lines[i].strip() or _indent(lines[i]) > key_indent):
             command = _SHELL_COMMENT.sub("", lines[i]).strip()
-            if command:
+            if command and _CHANGES_DIR.search(command):
+                moved = True
+            if command and not moved:
                 out.append((i, command))
             i += 1
     return out
@@ -253,7 +257,7 @@ def _check_missing_files(text, root):
     for n, command in _run_commands(lines):
         # Expressions and directory changes make the real path unknowable here; a
         # blocking error must not guess, so those commands are skipped.
-        if "${{" in command or re.search(r"(^|[\s;&|])(cd|pushd)\s", command):
+        if "${{" in command or _CHANGES_DIR.search(command):
             continue
         refs = _FILE_REFS.findall(command)
         if not refs:

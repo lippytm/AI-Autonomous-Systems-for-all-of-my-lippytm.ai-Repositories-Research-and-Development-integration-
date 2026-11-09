@@ -313,6 +313,21 @@ class PreventionTests(unittest.TestCase):
             found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
         self.assertEqual([("missing-referenced-file", 7), ("missing-referenced-file", 9)], found)
 
+    def test_cd_in_a_script_stops_checking_the_rest_of_it(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backend").mkdir()
+            (root / "backend" / "requirements.txt").write_text("")
+            text = ("    steps:\n"
+                    "      - run: |\n"
+                    "          cd backend\n"
+                    "          pip install -r requirements.txt\n"
+                    "      - run: |\n"
+                    "          pip install -r requirements.txt\n")
+            self.assertEqual([("missing-referenced-file", 6)],
+                             [(f.rule, f.line) for f in scan_text(text, "ci.yml", root)])
+
     def test_files_resolve_against_each_steps_own_working_directory(self):
         from swarm_hub.prevent import scan_text
         with tempfile.TemporaryDirectory() as tmp:
