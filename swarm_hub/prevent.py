@@ -168,6 +168,8 @@ def _check_sarif_permission(text, root):
 _FILE_REFS = re.compile(r"(?:^|&&|\|\||;|\|)\s*(?:pip3? install(?: [^\n;&|]*?)? -r|python3? )"
                         r"\s*([\w./-]+\.(?:txt|py))\b")
 _SHELL_COMMENT = re.compile(r"(^|\s)#.*$")  # `cmd # note` and whole-line comments
+# Quoted shell text is an argument, never a command: separators inside it don't count.
+_SHELL_QUOTED = re.compile(r'"(?:\\.|[^"\\])*"?|\'[^\']*\'?')
 _CHANGES_DIR = re.compile(r"(^|[\s;&|])(cd|pushd)\s")
 _RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
 
@@ -183,7 +185,9 @@ def _run_commands(lines: list[str]) -> list[tuple[int, str]]:
             continue
         value = _SHELL_COMMENT.sub("", m.group(2)).strip()
         if value and value[0] not in "|>":
-            out.append((i, value.strip("'\"")))
+            if len(value) > 1 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]  # YAML quoting around the whole command only
+            out.append((i, value))
             i += 1
             continue
         key_indent = len(m.group(1))
@@ -259,7 +263,7 @@ def _check_missing_files(text, root):
         # blocking error must not guess, so those commands are skipped.
         if "${{" in command or _CHANGES_DIR.search(command):
             continue
-        refs = _FILE_REFS.findall(command)
+        refs = _FILE_REFS.findall(_SHELL_QUOTED.sub("_", command))
         if not refs:
             continue
         workdir = _effective_workdir(lines, n, spans)

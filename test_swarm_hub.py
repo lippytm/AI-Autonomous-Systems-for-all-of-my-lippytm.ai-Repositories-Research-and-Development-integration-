@@ -328,6 +328,18 @@ class PreventionTests(unittest.TestCase):
             self.assertEqual([("missing-referenced-file", 6)],
                              [(f.rule, f.line) for f in scan_text(text, "ci.yml", root)])
 
+    def test_separators_inside_quotes_are_not_commands(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            text = ("    steps:\n"
+                    "      - run: echo \"Instructions; python example.py\"\n"
+                    "      - run: |\n"
+                    "          echo 'a && python quoted.py'\n"
+                    "          echo \"done\"; python real-missing.py\n"
+                    "      - run: \"python yaml-quoted-missing.py\"\n")
+            found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
+        self.assertEqual([("missing-referenced-file", 5), ("missing-referenced-file", 6)], found)
+
     def test_dynamic_working_directory_is_not_guessed(self):
         from swarm_hub.prevent import scan_text
         with tempfile.TemporaryDirectory() as tmp:
