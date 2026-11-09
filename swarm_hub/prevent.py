@@ -204,7 +204,7 @@ def _indent(line: str) -> int:
 
 
 _STEP = re.compile(r"^(\s*)-\s+\S")
-_WORKDIR = re.compile(r"^\s*(?:-\s+)?working-directory:\s*['\"]?([\w./-]+)")
+_WORKDIR = re.compile(r"^\s*(?:-\s+)?working-directory:\s*['\"]?(.+?)['\"]?\s*(?:#.*)?$")
 
 
 def _step_spans(lines: list[str]) -> list[tuple[int, int]]:
@@ -263,6 +263,8 @@ def _check_missing_files(text, root):
         if not refs:
             continue
         workdir = _effective_workdir(lines, n, spans)
+        if workdir and "${{" in workdir:
+            continue  # dynamic directory (e.g. a matrix value): the real path is unknowable here
         base = root / workdir if workdir else root
         if any(not (base / ref).exists() for ref in refs):
             hits.append((n + 1, lines[n].strip()))

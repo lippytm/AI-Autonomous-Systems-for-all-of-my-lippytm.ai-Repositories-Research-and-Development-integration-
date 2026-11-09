@@ -328,6 +328,17 @@ class PreventionTests(unittest.TestCase):
             self.assertEqual([("missing-referenced-file", 6)],
                              [(f.rule, f.line) for f in scan_text(text, "ci.yml", root)])
 
+    def test_dynamic_working_directory_is_not_guessed(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            text = ("    steps:\n"
+                    "      - working-directory: ${{ matrix.directory }}\n"
+                    "        run: pip install -r requirements.txt\n"
+                    "      - working-directory: \"app\"  # quoted, with a comment\n"
+                    "        run: pip install -r requirements.txt\n")
+            found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
+        self.assertEqual([("missing-referenced-file", 5)], found)
+
     def test_files_resolve_against_each_steps_own_working_directory(self):
         from swarm_hub.prevent import scan_text
         with tempfile.TemporaryDirectory() as tmp:
