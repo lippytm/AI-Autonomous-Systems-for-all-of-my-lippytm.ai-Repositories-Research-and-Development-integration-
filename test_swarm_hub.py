@@ -479,6 +479,8 @@ class AutofixTests(unittest.TestCase):
                                 + upload + "        with:\n          name: logs\n"),
             "matrix without per-leg name": ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
                                             + upload + "        with:\n          name: logs\n"),
+            "matrix with a run-wide expression": ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
+                                                  + upload + "        with:\n          name: logs-${{ github.sha }}\n"),
         }
         for label, text in unsafe.items():
             with self.subTest(label):
@@ -486,6 +488,8 @@ class AutofixTests(unittest.TestCase):
         per_leg = ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
                    + upload + "        with:\n          name: logs-${{ matrix.py }}\n")
         self.assertEqual(["retired-artifact-action"], autofix_text(per_leg)[1])
+        by_index = per_leg.replace("${{ matrix.py }}", "${{ strategy.job-index }}")
+        self.assertEqual(["retired-artifact-action"], autofix_text(by_index)[1])
         distinct = (upload + "        with:\n          name: a\n" + upload + "        with:\n          name: b\n")
         self.assertNotIn("@v3", autofix_text(distinct)[0])
 

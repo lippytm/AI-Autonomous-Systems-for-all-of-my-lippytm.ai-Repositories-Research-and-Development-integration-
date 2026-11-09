@@ -359,6 +359,8 @@ AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
 
 
 _UPLOAD = re.compile(r"^\s*-?\s*uses:\s*['\"]?actions/upload-artifact@")
+# Only matrix values and the job index differ between legs; ${{ github.sha }} does not.
+_PER_LEG = re.compile(r"\$\{\{[^}]*\b(?:matrix\.[\w-]+|strategy\.job-index)")
 _ARTIFACT_NAME = re.compile(r"^\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(#.*)?$")
 
 
@@ -366,7 +368,7 @@ def _artifact_upgrade_is_safe(text: str) -> bool:
     """v4 artifacts are immutable: two uploads with one name in a run fail.
 
     Only upgrade when every upload in the file sets its own distinct name, and,
-    in a workflow with a matrix, that name varies per leg (contains ``${{``).
+    in a workflow with a matrix, that name uses a matrix value or the job index.
     Anything else needs a person or agent to migrate names and consumers.
     """
     lines = text.splitlines()
@@ -383,7 +385,7 @@ def _artifact_upgrade_is_safe(text: str) -> bool:
             m = _ARTIFACT_NAME.match(lines[j])
             if m and _indent(lines[j]) > uses_indent:
                 name = m.group(1).strip()
-        if name is None or (has_matrix and "${{" not in name):
+        if name is None or (has_matrix and not _PER_LEG.search(name)):
             return False
         names.append(name)
     return len(names) == len(set(names))
