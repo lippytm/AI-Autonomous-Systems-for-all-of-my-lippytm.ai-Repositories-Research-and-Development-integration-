@@ -305,6 +305,30 @@ class PreventionTests(unittest.TestCase):
             (root / "requirements.txt").write_text("")
             self.assertEqual(["missing-referenced-file"], [f.rule for f in scan_text(text, "ci.yml", root)])
 
+    def test_permissions_are_resolved_per_job(self):
+        from swarm_hub.prevent import scan_text
+        text = ("permissions:\n  contents: read\n"
+                "jobs:\n"
+                "  release:\n"
+                "    permissions:\n      contents: write\n      security-events: write\n"
+                "    steps:\n      - run: git push origin main\n"
+                "  update:\n"
+                "    steps:\n      - uses: peter-evans/create-pull-request@v6\n"
+                "  scan:\n"
+                "    steps:\n      - uses: github/codeql-action/upload-sarif@v4\n")
+        found = [(f.rule, f.line) for f in scan_text(text, "ci.yml")]
+        self.assertEqual([("push-without-write-permission", 12), ("sarif-without-permission", 15)], found)
+
+    def test_workflow_permissions_apply_unless_a_job_overrides_them(self):
+        from swarm_hub.prevent import scan_text
+        text = ("permissions:\n  contents: write\n"
+                "jobs:\n"
+                "  ok:\n    steps:\n      - run: git push\n"
+                "  narrowed:\n    permissions:\n      contents: read\n    steps:\n      - run: git push\n"
+                "  all:\n    permissions: write-all\n    steps:\n      - run: git push\n")
+        self.assertEqual([("push-without-write-permission", 11)],
+                         [(f.rule, f.line) for f in scan_text(text, "ci.yml")])
+
     def test_this_repository_has_no_prevention_errors(self):
         from swarm_hub.prevent import scan_repository
         errors = [f for f in scan_repository(Path(__file__).parent) if f.severity == "error"]
@@ -352,6 +376,17 @@ class AutofixTests(unittest.TestCase):
             autofix_repository(tmp, write=True)
             self.assertEqual([], scan_repository(tmp))
             self.assertEqual([], autofix_repository(tmp))
+
+    def test_only_whole_version_tokens_are_rewritten(self):
+        from swarm_hub.prevent import autofix_text
+        text = ("      - uses: actions/checkout@v1-custom\n"
+                "      - uses: actions/checkout@v10\n"
+                "      - uses: actions/setup-node@v3.8.1\n")
+        fixed, applied = autofix_text(text)
+        self.assertEqual("      - uses: actions/checkout@v1-custom\n"
+                         "      - uses: actions/checkout@v10\n"
+                         "      - uses: actions/setup-node@v4\n", fixed)
+        self.assertEqual(["outdated-core-action"], applied)
 
     def test_structural_problems_are_not_auto_fixed(self):
         from swarm_hub.prevent import autofix_text

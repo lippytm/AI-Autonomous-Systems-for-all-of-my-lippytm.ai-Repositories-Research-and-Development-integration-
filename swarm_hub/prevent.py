@@ -49,9 +49,76 @@ def _uses(text: str, pattern: str) -> list[tuple[int, str]]:
     return [(n, line.strip()) for n, line in enumerate(text.splitlines(), 1) if regex.match(line)]
 
 
-def _grants(text: str, scope: str) -> bool:
-    return bool(re.search(rf"^\s*{re.escape(scope)}:\s*write\b", text, re.M)
-                or re.search(r"^\s*permissions:\s*write-all\b", text, re.M))
+def _block_end(lines: list[str], start: int) -> int:
+    """Index just past the YAML block whose key is on ``lines[start]``."""
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    for j in range(start + 1, len(lines)):
+        if lines[j].strip() and not lines[j].lstrip().startswith("#") \
+                and len(lines[j]) - len(lines[j].lstrip()) <= indent:
+            return j
+    return len(lines)
+
+
+def _permissions_grant(lines: list[str], start: int, end: int, indent: int, scope: str) -> bool | None:
+    """Does a ``permissions:`` key at ``indent`` within lines[start:end] grant ``scope: write``?
+
+    Returns None when there is no permissions key at that level.
+    """
+    key = re.compile(rf"^ {{{indent}}}permissions:\s*(\S.*)?$")
+    for i in range(start, end):
+        m = key.match(lines[i])
+        if not m:
+            continue
+        inline = (m.group(1) or "").split("#")[0].strip()
+        if inline:
+            return inline == "write-all"
+        for j in range(i + 1, _block_end(lines, i)):
+            if re.match(rf"^\s*{re.escape(scope)}:\s*write\b", lines[j]):
+                return True
+        return False
+    return None
+
+
+def _job_span(lines: list[str], index: int) -> tuple[int, int, int] | None:
+    """(start, end, indent) of the job containing ``lines[index]``, if any."""
+    jobs = next((i for i, line in enumerate(lines) if re.match(r"^jobs:\s*(#.*)?$", line)), None)
+    if jobs is None or index <= jobs:
+        return None
+    header = re.compile(r"^( +)[\w-]+:\s*(#.*)?$")
+    job_indent = None
+    for i in range(jobs + 1, len(lines)):
+        m = header.match(lines[i])
+        if m:
+            job_indent = len(m.group(1))
+            break
+    if job_indent is None:
+        return None
+    start = None
+    for i in range(index, jobs, -1):
+        m = header.match(lines[i])
+        if m and len(m.group(1)) == job_indent:
+            start = i
+            break
+    if start is None:
+        return None
+    return start, _block_end(lines, start), job_indent
+
+
+def _grants_at(text: str, line_no: int, scope: str) -> bool:
+    """Effective ``scope: write`` for the job containing 1-based ``line_no``.
+
+    A job-level ``permissions`` block replaces the workflow-level one entirely,
+    as GitHub does. With neither, assume the read-only default.
+    """
+    lines = text.splitlines()
+    job = _job_span(lines, line_no - 1)
+    if job:
+        start, end, indent = job
+        granted = _permissions_grant(lines, start + 1, end, indent + 2, scope)
+        if granted is not None:
+            return granted
+    granted = _permissions_grant(lines, 0, len(lines), 0, scope)
+    return bool(granted)
 
 
 def _check_retired_artifact(text, root):
@@ -71,16 +138,15 @@ def _check_unpinned(text, root):
 
 
 def _check_push_permission(text, root):
-    if _grants(text, "contents"):
-        return []
     hits = _uses(text, r"peter-evans/create-pull-request@\S+")
     hits += [(n, line.strip()) for n, line in enumerate(text.splitlines(), 1)
              if re.search(r"(^|[\s;&|])git push\b", line) and not line.strip().startswith("#")]
-    return hits
+    return [(n, e) for n, e in hits if not _grants_at(text, n, "contents")]
 
 
 def _check_sarif_permission(text, root):
-    return [] if _grants(text, "security-events") else _uses(text, r"github/codeql-action/upload-sarif@\S+")
+    return [(n, e) for n, e in _uses(text, r"github/codeql-action/upload-sarif@\S+")
+            if not _grants_at(text, n, "security-events")]
 
 
 _FILE_REFS = re.compile(r"(?:pip3? install(?: [^\n]*?)? -r|python3? )\s*([\w./-]+\.(?:txt|py))\b")
@@ -173,8 +239,8 @@ RULES = [
          "with 'Resource not accessible by integration'.",
          "Grant 'security-events: write' on the scanning job only.",
          "      - uses: github/codeql-action/upload-sarif@v4\n",
-         "    permissions:\n      security-events: write\n    steps:\n"
-         "      - uses: github/codeql-action/upload-sarif@v4\n", _check_sarif_permission),
+         "jobs:\n  scan:\n    permissions:\n      contents: read\n      security-events: write\n"
+         "    steps:\n      - uses: github/codeql-action/upload-sarif@v4\n", _check_sarif_permission),
     Rule("codeql-action-v3", "warning", "",
          "github/codeql-action v3 is deprecated in December 2026.",
          "Move every github/codeql-action/* step to @v4.",
@@ -251,18 +317,21 @@ def selftest(rules: list[Rule] = RULES) -> list[str]:
 # findings for an agent or person, because a wrong YAML edit can break a workflow.
 
 _USES_PREFIX = r"(^\s*-?\s*uses:\s*['\"]?)"
+_TOKEN_END = r"(?=['\"]?\s*(?:#.*)?$)"  # the whole ref, so @v10 or @v1-custom never match
 AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
     "retired-artifact-action": [
-        (re.compile(_USES_PREFIX + r"(actions/(?:upload|download)-artifact)@v[123](?:\.[\d.]+)?", re.M),
+        (re.compile(_USES_PREFIX + r"(actions/(?:upload|download)-artifact)@v[123](?:\.[\d.]+)?"
+                    + _TOKEN_END, re.M),
          r"\1\2@v4"),
     ],
     "codeql-action-v3": [
-        (re.compile(_USES_PREFIX + r"(github/codeql-action/[\w-]+)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
+        (re.compile(_USES_PREFIX + r"(github/codeql-action/[\w-]+)@v[123](?:\.[\d.]+)?" + _TOKEN_END, re.M),
+         r"\1\2@v4"),
     ],
     "outdated-core-action": [
-        (re.compile(_USES_PREFIX + r"(actions/checkout)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
-        (re.compile(_USES_PREFIX + r"(actions/setup-python)@v[1234](?:\.[\d.]+)?", re.M), r"\1\2@v5"),
-        (re.compile(_USES_PREFIX + r"(actions/setup-node)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
+        (re.compile(_USES_PREFIX + r"(actions/checkout)@v[123](?:\.[\d.]+)?" + _TOKEN_END, re.M), r"\1\2@v4"),
+        (re.compile(_USES_PREFIX + r"(actions/setup-python)@v[1234](?:\.[\d.]+)?" + _TOKEN_END, re.M), r"\1\2@v5"),
+        (re.compile(_USES_PREFIX + r"(actions/setup-node)@v[123](?:\.[\d.]+)?" + _TOKEN_END, re.M), r"\1\2@v4"),
     ],
 }
 
