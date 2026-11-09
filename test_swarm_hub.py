@@ -212,5 +212,94 @@ class GitHubClientTests(unittest.TestCase):
             client.get("/repos/lippytm/r")
 
 
+class PreventionTests(unittest.TestCase):
+    def test_every_rule_flags_bad_and_passes_good(self):
+        from swarm_hub.prevent import selftest
+        self.assertEqual([], selftest())
+
+    def test_catches_the_real_failures_before_they_run(self):
+        from swarm_hub.prevent import scan_text
+        broken = (
+            "on: push\n"
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - uses: aquasecurity/trivy-action@master\n"
+            "      - uses: github/codeql-action/upload-sarif@v3\n"
+            "      - run: pip install -r requirements.txt\n"
+            "      - uses: actions/upload-artifact@v3\n"
+            "      - uses: peter-evans/create-pull-request@v6\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            found = scan_text(broken, "ci.yml", Path(tmp))
+        self.assertEqual(
+            ["sarif-without-permission", "missing-referenced-file", "retired-artifact-action",
+             "push-without-write-permission", "unpinned-action", "codeql-action-v3"],
+            [f.rule for f in found])
+        self.assertEqual(7, found[0].line)
+        self.assertEqual("error", found[0].severity)
+
+    def test_fixed_workflow_is_clean(self):
+        from swarm_hub.prevent import scan_text
+        fixed = (
+            "permissions:\n  contents: write\n  pull-requests: write\n  security-events: write\n"
+            "jobs:\n  scan:\n    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0\n"
+            "      - uses: github/codeql-action/upload-sarif@v4\n"
+            "      - run: python -m unittest\n"
+            "      - uses: actions/upload-artifact@v4\n"
+            "      - uses: peter-evans/create-pull-request@v6\n"
+            "      # git push is mentioned only in a comment\n"
+        )
+        self.assertEqual([], scan_text(fixed, "ci.yml", Path(".")))
+
+    def test_existing_files_and_working_directory_are_respected(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "backend").mkdir()
+            (Path(tmp) / "backend" / "requirements.txt").write_text("")
+            text = "      working-directory: backend\n      run: pip install -r requirements.txt\n"
+            self.assertEqual([], scan_text(text, "ci.yml", Path(tmp)))
+
+    def test_this_repository_has_no_prevention_errors(self):
+        from swarm_hub.prevent import scan_repository
+        errors = [f for f in scan_repository(Path(__file__).parent) if f.severity == "error"]
+        self.assertEqual([], errors)
+
+    def test_prevent_cli_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workflows = Path(tmp) / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text("      - uses: actions/upload-artifact@v3\n")
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(2, main(["prevent", tmp, "--json"]))
+            self.assertEqual("retired-artifact-action", json.loads(out.getvalue())[0]["rule"])
+
+
+class TrainingTests(unittest.TestCase):
+    def test_dataset_covers_every_lesson_and_rule(self):
+        from swarm_hub.prevent import RULES
+        from swarm_hub.training import GUARDRAILS, examples
+        playbook = load_playbook()
+        data = examples(playbook)
+        kinds = [d["meta"]["kind"] for d in data]
+        self.assertEqual(len(playbook.patterns), kinds.count("diagnose"))
+        self.assertEqual(len(RULES), kinds.count("prevent"))
+        self.assertEqual(len(RULES), kinds.count("no-problem"))
+        self.assertEqual(len(GUARDRAILS), kinds.count("guardrail"))
+        for item in data:
+            self.assertEqual(["system", "user", "assistant"], [m["role"] for m in item["messages"]])
+            self.assertTrue(all(m["content"].strip() for m in item["messages"]))
+
+    def test_committed_dataset_is_up_to_date(self):
+        from swarm_hub.training import examples, to_jsonl
+        committed = Path(__file__).parent / "training" / "swarm_repair.jsonl"
+        self.assertEqual(to_jsonl(examples(load_playbook())), committed.read_text(encoding="utf-8"),
+                         "Regenerate: python -m swarm_hub export-training -o training/swarm_repair.jsonl")
+
+
 if __name__ == "__main__":
     unittest.main()

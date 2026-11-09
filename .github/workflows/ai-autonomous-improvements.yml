@@ -24,8 +24,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Self-test registry and playbook
-        run: python -m swarm_hub selftest
+      - name: Self-test registry, playbook and prevention rules
+        run: |
+          mkdir -p reports
+          python -m swarm_hub selftest
+
+      - name: Prevention scan (this repo)
+        run: python -m swarm_hub prevent | tee reports/prevent.txt
 
       - name: Default-branch CI health
         env:

@@ -8,11 +8,13 @@ comments or calls an AI provider.
 
 ```bash
 python -m swarm_hub fleet                 # 18 agents, roles, capabilities
-python -m swarm_hub selftest              # registry + every playbook lesson still works
+python -m swarm_hub selftest              # registry, every lesson and every prevention rule still work
 python -m swarm_hub diagnose ci.log       # name known failures, the fix, and who owns it
 python -m swarm_hub route lint "fix E501" # which agents a task goes to
 GITHUB_TOKEN=... python -m swarm_hub health   # latest default-branch CI per repo
 GITHUB_TOKEN=... python -m swarm_hub prs      # triage every open PR fleet-wide
+python -m swarm_hub prevent ../repo-a ../repo-b  # find failure causes before CI runs them
+python -m swarm_hub export-training -o training/swarm_repair.jsonl
 ```
 
 `diagnose` exits `2` when it finds a blocking problem, so a workflow can gate on it.
@@ -43,6 +45,48 @@ five steps for any failure, so a lesson one agent learns is available to every o
 
    A lesson is only accepted if its regex matches its own example, and `selftest` (run
    in CI) re-proves every lesson on every push. Bad lessons cannot accumulate.
+
+## Solving problems before they happen
+
+Lessons describe a failure after it happened. **Prevention rules**
+(`swarm_hub/prevent.py`) look for the cause in workflow source, so the failure never
+happens in another repository. Each rule links to the lesson it prevents and carries a
+bad and a good example; `selftest` proves every rule flags its bad example and passes
+its good one.
+
+| Rule | Severity | Stops |
+|---|---|---|
+| retired-artifact-action | error | `upload-artifact@v1-3` failing at "Set up job" |
+| missing-referenced-file | error | `pip install -r` / `python x.py` on files that don't exist |
+| push-without-write-permission | error | `git push` / create-pull-request with a read-only token |
+| sarif-without-permission | error | upload-sarif without `security-events: write` |
+| codeql-action-v3 | warning | CodeQL v3 retirement in December 2026 |
+| outdated-core-action | warning | checkout/setup-python/setup-node on retired Node runtimes |
+| unpinned-action | warning | third-party actions on `@master`/`@main` (supply chain) |
+| dependency-review-needs-setting | info | dependency review failing while Dependency graph is off |
+
+Run against the old, broken workflows, these rules flag every workflow-caused failure
+from 2026-11-09 before it would have run. Run against the fleet, they found two
+problems that had not yet failed: tower-control's CodeQL v3 (which would break in
+December) and an unpinned `trivy-action@master` in AI-Time-Machines. Both are now fixed.
+
+When you add a lesson whose cause is visible in source, add a rule with it, and set
+`prevents` to the lesson's id.
+
+## Training other AI systems
+
+`python -m swarm_hub export-training` writes everything the swarm has verified as JSONL
+chat examples ([training/swarm_repair.jsonl](training/swarm_repair.jsonl)), ready for
+fine-tuning, few-shot prompts or evaluating any agent (ChatGPT, Gemini, Claude,
+Copilot, Jarvis):
+
+- `diagnose`: real CI log line → cause, fix, owner (one per lesson)
+- `prevent`: risky workflow excerpt → problem and corrected excerpt (one per rule)
+- `no-problem`: correct excerpt → "no problem found", so agents learn not to over-flag
+- `guardrail`: tempting shortcut ("delete the check", "skip the test") → why not, and what to do
+
+Every example comes from a self-tested lesson or rule, and a unit test fails if the
+committed file falls out of date. After an agent runs `learn`, re-run `export-training` and commit the result.
 
 ## Lessons so far
 

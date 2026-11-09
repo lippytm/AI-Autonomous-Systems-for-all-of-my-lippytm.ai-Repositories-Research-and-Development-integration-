@@ -5,6 +5,8 @@
   python -m swarm_hub diagnose LOGFILE|-       name known problems in a CI log, with fixes
   python -m swarm_hub route CAPABILITY TEXT    show which agents a task would go to
   python -m swarm_hub learn --id ... (see -h)  teach the swarm a new failure pattern
+  python -m swarm_hub prevent [REPO ...]       find known failure causes before CI runs
+  python -m swarm_hub export-training [-o F]   write verified knowledge as JSONL training data
   python -m swarm_hub health                   latest default-branch CI per repo (network)
   python -m swarm_hub prs [--repo ID]          triage open PRs fleet-wide (network)
 """
@@ -21,6 +23,9 @@ from .bus import Bus
 from .fleet import load_fleet
 from .github import GitHub, GitHubError
 from .playbook import SEVERITIES, Pattern, load_playbook
+from .prevent import RULES, scan_repository
+from .prevent import selftest as prevent_selftest
+from .training import examples, to_jsonl
 from .triage import ACTIONS, triage
 
 
@@ -34,14 +39,19 @@ def _fleet(args):
 
 def _selftest(args):
     fleet, playbook = load_fleet(), load_playbook()
-    problems = playbook.selftest()
+    problems = playbook.selftest() + prevent_selftest()
+    lesson_ids = {p.id for p in playbook.patterns}
+    for rule in RULES:
+        if rule.prevents and rule.prevents not in lesson_ids:
+            problems.append(f"{rule.id}: prevents unknown lesson {rule.prevents!r}")
     capabilities = {c for a in fleet for c in a.capabilities} | {"owner"}
     for pattern in playbook.patterns:
         if pattern.capability not in capabilities:
             problems.append(f"{pattern.id}: no agent has capability {pattern.capability!r}")
     for problem in problems:
         print(f"FAIL {problem}")
-    print(f"{len(fleet)} agents, {len(playbook.patterns)} lessons, {len(problems)} problems")
+    print(f"{len(fleet)} agents, {len(playbook.patterns)} lessons, "
+          f"{len(RULES)} prevention rules, {len(problems)} problems")
     return 1 if problems else 0
 
 
@@ -84,6 +94,33 @@ def _learn(args):
     playbook.learn(Pattern(args.id, args.match, args.diagnosis, args.fix, args.capability,
                            args.severity, args.example, args.learned_from or ""))
     print(f"Learned {args.id}; the playbook now has {len(playbook.patterns)} lessons")
+    return 0
+
+
+def _prevent(args):
+    findings = []
+    for root in args.repos or ["."]:
+        for f in scan_repository(root):
+            findings.append({"repo": root, **f.__dict__})
+    if args.json:
+        print(json.dumps(findings, indent=2))
+    else:
+        for f in findings:
+            print(f"[{f['severity']}] {f['rule']}  {f['repo']}/{f['path']}:{f['line']}\n"
+                  f"  {f['evidence']}\n  why: {f['message']}\n  fix: {f['fix']}\n")
+        counts = Counter(f["severity"] for f in findings)
+        print(", ".join(f"{k}={counts.get(k, 0)}" for k in ("error", "warning", "info")))
+    return 2 if any(f["severity"] == "error" for f in findings) else 0
+
+
+def _export_training(args):
+    data = to_jsonl(examples(load_playbook()))
+    if args.output == "-":
+        sys.stdout.write(data)
+    else:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(data)
+        print(f"Wrote {data.count(chr(10))} examples to {args.output}", file=sys.stderr)
     return 0
 
 
@@ -149,6 +186,13 @@ def main(argv=None) -> int:
     p.add_argument("--severity", choices=SEVERITIES, default="blocking")
     p.add_argument("--learned-from")
     p.set_defaults(func=_learn)
+    p = sub.add_parser("prevent")
+    p.add_argument("repos", nargs="*", help="repository roots (default: .)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=_prevent)
+    p = sub.add_parser("export-training")
+    p.add_argument("-o", "--output", default="-")
+    p.set_defaults(func=_export_training)
     sub.add_parser("health").set_defaults(func=_health)
     p = sub.add_parser("prs")
     p.add_argument("--repo", help="agent id from `fleet`")

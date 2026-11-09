@@ -39,7 +39,7 @@ eslint 8→10, jest 29→30, uuid 9→14). Once their tests run, merge them one 
 | Factory.ai | CI | 13 flake8 errors in `bots/marvin_dca_bot.py` | Formatting-only fix; flake8 clean, 98 tests pass |
 | Factory.ai | Validate Templates | `templates/encyclopedia_delivery/bot.yaml` is an architecture-only design, but was checked against the deployable-template schema | Validator now checks `status: architecture_only` manifests against their own schema, and rejects any that claim a deployment |
 | AI-Time-Machines | Continuous Integration | Trivy SARIF upload lacked `security-events: write` | Granted on that job only; upload-sarif v3→v4 |
-| AI-Time-Machines | Dependency Updates | `git push` denied to github-actions[bot] | Already fixed by **PR #50**; merge it after enabling Dependency graph. Also enable *Settings → Actions → General → Allow GitHub Actions to create pull requests* |
+| AI-Time-Machines | Dependency Updates | `git push` denied to github-actions[bot] | Fixed by **PR #50**, merged 2026-11-09. Also enable *Settings → Actions → General → Allow GitHub Actions to create pull requests* |
 | AI-Jarvis…DOG-Dog-dog- | jarvis-audit (intermittent) | Unauthenticated GitHub inventory hits the 60/hour limit on shared runners (`HTTP 403`) | Opt-in `JARVIS_PUBLIC_INVENTORY_TOKEN` (read-only `github.token`) on the public endpoint; the private-data guard is unchanged |
 
 ### 3. Duplicates to collapse
