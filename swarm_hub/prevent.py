@@ -163,7 +163,34 @@ def _check_sarif_permission(text, root):
             if not _grants_at(text, n, "security-events")]
 
 
-_FILE_REFS = re.compile(r"(?:pip3? install(?: [^\n]*?)? -r|python3? )\s*([\w./-]+\.(?:txt|py))\b")
+# A file reference only counts at a shell command position: start of the run
+# text or after && || ; |. Text such as `echo "python x.py"` is not a command.
+_FILE_REFS = re.compile(r"(?:^|&&|\|\||;|\|)\s*(?:pip3? install(?: [^\n;&|]*?)? -r|python3? )"
+                        r"\s*([\w./-]+\.(?:txt|py))\b")
+_RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
+
+
+def _run_commands(lines: list[str]) -> list[tuple[int, str]]:
+    """(index, command text) for every line of shell inside a ``run:`` value."""
+    out = []
+    i = 0
+    while i < len(lines):
+        m = _RUN_KEY.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        value = m.group(2).split(" #")[0].strip()
+        if value and value[0] not in "|>":
+            out.append((i, value.strip("'\"")))
+            i += 1
+            continue
+        key_indent = len(m.group(1))
+        i += 1
+        while i < len(lines) and (not lines[i].strip() or _indent(lines[i]) > key_indent):
+            if lines[i].strip() and not lines[i].strip().startswith("#"):
+                out.append((i, lines[i].strip()))
+            i += 1
+    return out
 
 
 def _indent(line: str) -> int:
@@ -221,16 +248,18 @@ def _check_missing_files(text, root):
     lines = text.splitlines()
     spans = _step_spans(lines)
     hits = []
-    for n, line in enumerate(lines):
-        if line.strip().startswith("#") or "${{" in line:
+    for n, command in _run_commands(lines):
+        # Expressions and directory changes make the real path unknowable here; a
+        # blocking error must not guess, so those commands are skipped.
+        if "${{" in command or re.search(r"(^|[\s;&|])(cd|pushd)\s", command):
             continue
-        refs = _FILE_REFS.findall(line)
+        refs = _FILE_REFS.findall(command)
         if not refs:
             continue
         workdir = _effective_workdir(lines, n, spans)
         base = root / workdir if workdir else root
         if any(not (base / ref).exists() for ref in refs):
-            hits.append((n + 1, line.strip()))
+            hits.append((n + 1, lines[n].strip()))
     return hits
 
 
@@ -241,7 +270,9 @@ def _check_dependency_review(text, root):
 RULES = [
     Rule("retired-artifact-action", "error", "deprecated-artifact-action",
          "actions/upload-artifact or download-artifact v1-v3 is retired; GitHub fails the job at 'Set up job'.",
-         "Use @v4 and give each upload a unique name.",
+         "Migrate to @v4 by hand: give every upload a name unique across steps and matrix legs "
+         "(e.g. include each matrix key), set include-hidden-files: true if hidden files are needed, "
+         "and upgrade matching download-artifact steps in the same change.",
          "      - uses: actions/upload-artifact@v3\n        with:\n          name: reports\n",
          "      - uses: actions/upload-artifact@v4\n        with:\n          name: reports\n",
          _check_retired_artifact),
@@ -337,15 +368,13 @@ def selftest(rules: list[Rule] = RULES) -> list[str]:
 # Only fixes that are a pure, local substitution are automatic. Structural edits
 # (adding permission blocks, pinning to a SHA that needs a network lookup) stay
 # findings for an agent or person, because a wrong YAML edit can break a workflow.
+# upload/download-artifact v3 -> v4 is deliberately NOT automatic: v4 artifacts are
+# immutable (duplicate names across steps or matrix legs fail) and exclude hidden
+# files by default, so the upgrade changes behaviour and needs a real migration.
 
 _USES_PREFIX = r"(^\s*-?\s*uses:\s*['\"]?)"
 _TOKEN_END = r"(?=['\"]?\s*(?:#.*)?$)"  # the whole ref, so @v10 or @v1-custom never match
 AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
-    "retired-artifact-action": [
-        (re.compile(_USES_PREFIX + r"(actions/(?:upload|download)-artifact)@v[123](?:\.[\d.]+)?"
-                    + _TOKEN_END, re.M),
-         r"\1\2@v4"),
-    ],
     "codeql-action-v3": [
         (re.compile(_USES_PREFIX + r"(github/codeql-action/[\w-]+)@v[123](?:\.[\d.]+)?" + _TOKEN_END, re.M),
          r"\1\2@v4"),
@@ -358,45 +387,10 @@ AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
 }
 
 
-_UPLOAD = re.compile(r"^\s*-?\s*uses:\s*['\"]?actions/upload-artifact@")
-# Only matrix values and the job index differ between legs; ${{ github.sha }} does not.
-_PER_LEG = re.compile(r"\$\{\{[^}]*\b(?:matrix\.[\w-]+|strategy\.job-index)")
-_ARTIFACT_NAME = re.compile(r"^\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(#.*)?$")
-
-
-def _artifact_upgrade_is_safe(text: str) -> bool:
-    """v4 artifacts are immutable: two uploads with one name in a run fail.
-
-    Only upgrade when every upload in the file sets its own distinct name, and,
-    in a workflow with a matrix, that name uses a matrix value or the job index.
-    Anything else needs a person or agent to migrate names and consumers.
-    """
-    lines = text.splitlines()
-    spans = _step_spans(lines)
-    has_matrix = bool(re.search(r"^\s*matrix:", text, re.M))
-    names = []
-    for i, line in enumerate(lines):
-        if not _UPLOAD.match(line):
-            continue
-        uses_indent = _indent(line) + (2 if line.lstrip().startswith("-") else 0)
-        span = max((s for s in spans if s[0] <= i < s[1]), default=(i, i + 1))
-        name = None
-        for j in range(span[0], span[1]):  # the artifact name lives under `with:`
-            m = _ARTIFACT_NAME.match(lines[j])
-            if m and _indent(lines[j]) > uses_indent:
-                name = m.group(1).strip()
-        if name is None or (has_matrix and not _PER_LEG.search(name)):
-            return False
-        names.append(name)
-    return len(names) == len(set(names))
-
-
 def autofix_text(text: str) -> tuple[str, list[str]]:
     """Apply every automatic fix. Returns the new text and the rule ids applied."""
     applied = []
     for rule_id, substitutions in AUTOFIXES.items():
-        if rule_id == "retired-artifact-action" and not _artifact_upgrade_is_safe(text):
-            continue  # stays a finding: names and consumers need a real migration
         for regex, replacement in substitutions:
             text, count = regex.subn(replacement, text)
             if count:

@@ -73,8 +73,10 @@ December) and an unpinned `trivy-action@master` in AI-Time-Machines. Both are no
 
 ### Auto-fix
 
-`autofix` applies the fixes that are pure, local substitutions: retired artifact
-actions → v4, CodeQL v3 → v4, and outdated checkout/setup-python/setup-node versions.
+`autofix` applies only the fixes that are pure, local substitutions: CodeQL v3 → v4 and
+outdated checkout/setup-python/setup-node versions. Retired artifact actions are
+reported but never auto-fixed: v4 artifacts are immutable and skip hidden files by
+default, so the upgrade changes behaviour and needs a real migration.
 By default it prints the diff; `--write` applies it. Before anything is written, it
 re-scans the result and refuses to write if the fixed rule still fires, and `selftest`
 proves every auto-fix clears its rule's own bad example. Structural problems (missing

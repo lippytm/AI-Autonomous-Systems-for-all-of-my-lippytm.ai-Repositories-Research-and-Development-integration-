@@ -298,6 +298,20 @@ class PreventionTests(unittest.TestCase):
         )
         self.assertEqual([], scan_text(fixed, "ci.yml", Path(".")))
 
+    def test_only_real_commands_count_as_file_references(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            text = ("    steps:\n"
+                    "      - name: python missing.py is only a step name\n"
+                    "        run: echo \"Use python example.py\"\n"
+                    "      - run: |\n"
+                    "          echo python also-missing.py\n"
+                    "          make deps && python real-missing.py\n"
+                    "          cd app && python resolved-elsewhere.py\n"
+                    "      - run: python one-line-missing.py\n")
+            found = [(f.rule, f.line) for f in scan_text(text, "ci.yml", Path(tmp))]
+        self.assertEqual([("missing-referenced-file", 6), ("missing-referenced-file", 8)], found)
+
     def test_files_resolve_against_each_steps_own_working_directory(self):
         from swarm_hub.prevent import scan_text
         with tempfile.TemporaryDirectory() as tmp:
@@ -435,13 +449,13 @@ class AutofixTests(unittest.TestCase):
                 "      - run: echo actions/upload-artifact@v3 is only text here\n")
         fixed, applied = autofix_text(text)
         self.assertEqual(
-            "      - uses: actions/upload-artifact@v4   # keep comment\n"
+            "      - uses: actions/upload-artifact@v3   # keep comment\n"
             "        with:\n          name: reports\n"
             "      - uses: 'actions/setup-python@v5'\n"
             "      - uses: github/codeql-action/analyze@v4\n"
             "      - uses: actions/checkout@v4\n"
             "      - run: echo actions/upload-artifact@v3 is only text here\n", fixed)
-        self.assertEqual(["codeql-action-v3", "outdated-core-action", "retired-artifact-action"], applied)
+        self.assertEqual(["codeql-action-v3", "outdated-core-action"], applied)
         self.assertEqual((fixed, []), autofix_text(fixed))
 
     def test_dry_run_then_write(self):
@@ -450,11 +464,10 @@ class AutofixTests(unittest.TestCase):
             workflows = Path(tmp) / ".github" / "workflows"
             workflows.mkdir(parents=True)
             path = workflows / "ci.yml"
-            path.write_text("    steps:\n      - uses: actions/upload-artifact@v3\n"
-                            "        with:\n          name: reports\n")
+            path.write_text("    steps:\n      - uses: actions/setup-python@v4\n")
             changes = autofix_repository(tmp)
-            self.assertIn("+      - uses: actions/upload-artifact@v4", changes[0]["diff"])
-            self.assertIn("@v3", path.read_text())
+            self.assertIn("+      - uses: actions/setup-python@v5", changes[0]["diff"])
+            self.assertIn("@v4", path.read_text())
             autofix_repository(tmp, write=True)
             self.assertEqual([], scan_repository(tmp))
             self.assertEqual([], autofix_repository(tmp))
@@ -470,28 +483,19 @@ class AutofixTests(unittest.TestCase):
                          "      - uses: actions/setup-node@v4\n", fixed)
         self.assertEqual(["outdated-core-action"], applied)
 
-    def test_artifact_upgrade_skipped_when_v4_would_collide(self):
+    def test_artifact_upgrades_are_never_automatic(self):
         from swarm_hub.prevent import autofix_text
         upload = "      - uses: actions/upload-artifact@v3\n"
-        unsafe = {
-            "unnamed": upload,
-            "duplicate names": (upload + "        with:\n          name: logs\n"
-                                + upload + "        with:\n          name: logs\n"),
-            "matrix without per-leg name": ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
-                                            + upload + "        with:\n          name: logs\n"),
-            "matrix with a run-wide expression": ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
-                                                  + upload + "        with:\n          name: logs-${{ github.sha }}\n"),
-        }
-        for label, text in unsafe.items():
-            with self.subTest(label):
+        cases = [
+            upload,
+            upload + "        with:\n          name: reports\n",
+            upload + "        with:\n          name: logs-${{ matrix.os }}-${{ matrix.py }}\n",
+            upload + "        with:\n          name: cache\n          path: .cache/\n",
+            "      - uses: actions/download-artifact@v3\n",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
                 self.assertEqual((text, []), autofix_text(text))
-        per_leg = ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
-                   + upload + "        with:\n          name: logs-${{ matrix.py }}\n")
-        self.assertEqual(["retired-artifact-action"], autofix_text(per_leg)[1])
-        by_index = per_leg.replace("${{ matrix.py }}", "${{ strategy.job-index }}")
-        self.assertEqual(["retired-artifact-action"], autofix_text(by_index)[1])
-        distinct = (upload + "        with:\n          name: a\n" + upload + "        with:\n          name: b\n")
-        self.assertNotIn("@v3", autofix_text(distinct)[0])
 
     def test_skipped_artifact_upgrade_still_reported(self):
         from swarm_hub.prevent import autofix_repository, scan_repository
