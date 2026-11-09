@@ -1,0 +1,23 @@
+{
+  "owner": "lippytm",
+  "repositories": [
+    {"id": "hub", "repo": "AI-Autonomous-Systems-for-all-of-my-lippytm.ai-Repositories-Research-and-Development-integration-", "role": "command_hub", "capabilities": ["routing", "research", "triage", "diagnose", "workflows"]},
+    {"id": "tower", "repo": "lippytm-lippytm.ai-tower-control-ai", "role": "control_tower", "capabilities": ["coordination", "node", "release-gates"]},
+    {"id": "dog", "repo": "AI-Jarvis-Assistant-ChatGPT-Gemini-AI-GitHub-Claude-and-all-of-my-Repositories-DOG-Dog-dog-", "role": "jarvis_runtime", "capabilities": ["patrol", "audit", "python", "workflows"]},
+    {"id": "copilot-healing", "repo": "AI-Jarvis-Assistant-AI-Copilot-for-Self-Healing-and-Self-Improvements-for-all-Repositories-", "role": "self_healing", "capabilities": ["diagnose", "repair", "playbooks", "workflows"]},
+    {"id": "jarvis-business", "repo": "AI-Jarvis-Assistant-GitHub-Copilot-AI-Jarvis-Assistant-Claude-AI-Jarvis-Assistant-ChatGPT-Business", "role": "jarvis_foundation", "capabilities": ["cross-platform", "business"]},
+    {"id": "claude-codex", "repo": "Claude-with-AI-Jarvis-Assistant-CodeX-", "role": "assistant_adapter", "capabilities": ["claude", "licensing"]},
+    {"id": "gemini", "repo": "Gemini-NotebookLM-s-AI-Agnostic-Clone-Engine-Fabric-", "role": "assistant_adapter", "capabilities": ["gemini", "notebooklm", "review"]},
+    {"id": "clone", "repo": "AI-Clone-of-Charles-Earl-Lipshay-lippytm-lippytm.AI-lippytmai-", "role": "clone_identity", "capabilities": ["persona", "crm"]},
+    {"id": "hermes", "repo": "aievolutionaryevolutions.com-Hermes-Fabric-MemPalace-", "role": "messaging_memory", "capabilities": ["hermes", "fabric", "memory", "installer"]},
+    {"id": "hostinger", "repo": "Hostinger.com-with-my-AI-Jarvis-Assistant-ChatGPT-ChatGPT-Business-Gemini-AI-Claude", "role": "hosting", "capabilities": ["deploy", "installer", "hosting"]},
+    {"id": "factory", "repo": "Factory.ai", "role": "factory", "capabilities": ["bots", "python", "templates", "lint"]},
+    {"id": "time-machines", "repo": "AI-Time-Machines", "role": "platform", "capabilities": ["node", "backend", "frontend", "dependencies"]},
+    {"id": "fullstack", "repo": "AI-Full-Stack-AI-DevOps-Synthetic-Intelligence-Engines-AgentsBots-Web3-Websites-", "role": "platform", "capabilities": ["web3", "devops"]},
+    {"id": "corporate", "repo": "Intergalactic-Corporate-Services-LLC-", "role": "business_services", "capabilities": ["python", "routing", "portfolio"]},
+    {"id": "encyclopedia", "repo": "The-Encyclopedia-of-Everything-Applied-ChatAIBots", "role": "education", "capabilities": ["teaching", "docs", "lessons"]},
+    {"id": "evolutionary", "repo": "Evolutionary-Evolutions-Social-Multimedia-Networks-Agency-", "role": "media_agency", "capabilities": ["content", "social", "sync"]},
+    {"id": "zoological", "repo": "AI-Intergalactic-Zoological-Social-Multimedia-Agency-Networks-", "role": "media_agency", "capabilities": ["content", "campaigns"]},
+    {"id": "quantum", "repo": "Quantum-Questions-of-the-Many-Worlds-Universes-of-Reruns-", "role": "research", "capabilities": ["research", "docs"]}
+  ]
+}

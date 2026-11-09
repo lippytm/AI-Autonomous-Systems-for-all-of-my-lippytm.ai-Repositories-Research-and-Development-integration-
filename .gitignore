@@ -6,3 +6,5 @@ __pycache__/
 agents.local.json
 *.pem
 *.key
+swarm_hub/*.lock
+swarm_hub/*.tmp

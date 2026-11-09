@@ -1,8 +1,15 @@
 # AI Autonomous Systems Integration
 
+> 🔖 **Picking up where you left off?** Start with [RESUME_HERE.md](RESUME_HERE.md).
+
 A dependency-free Python prototype for inspecting local repositories and learning
 safe repository-development practices. It can discover Git working trees,
 produce a JSON health report, and run short interactive lessons.
+
+**Swarm Hub** (`python -m swarm_hub`) coordinates the whole lippytm fleet: an agent
+registry, a Hermes message bus, a self-testing repair playbook that agents learn from
+and teach to, and fleet-wide CI and PR triage. See [SWARM_HUB.md](SWARM_HUB.md) and the
+latest [fleet review](docs/FLEET_REVIEW_2026-11-09.md).
 
 ## Requirements
 
