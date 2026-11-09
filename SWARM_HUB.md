@@ -131,3 +131,10 @@ for where each one came from.
 
 To add a repository to the swarm, add one entry to `swarm_hub/fleet.json` and run
 `python -m swarm_hub selftest`.
+
+## Using it from chat
+
+The Claude Code skill in [.claude/skills/swarm-hub/SKILL.md](.claude/skills/swarm-hub/SKILL.md)
+maps plain requests ("check my repos", "fix CI", "which PRs can I merge?", "teach the swarm")
+to these commands, so any Claude session with this repository can run the loop from chat.
+It also lists the settings that only the owner can change, with direct links.
