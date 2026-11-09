@@ -114,18 +114,28 @@ class Playbook:
 
 @contextmanager
 def _locked(path: Path):
-    """Exclusive inter-process lock beside ``path`` (advisory; no-op without fcntl)."""
-    with open(path.with_name(path.name + ".lock"), "w") as handle:
+    """Exclusive inter-process lock beside ``path``: fcntl on POSIX, msvcrt on Windows."""
+    with open(path.with_name(path.name + ".lock"), "a+") as handle:
         try:
             import fcntl
-        except ImportError:  # Windows: best effort, atomic replace still applies
-            yield
+        except ImportError:
+            fcntl = None
+        if fcntl is not None:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
             return
-        fcntl.flock(handle, fcntl.LOCK_EX)
+        import msvcrt  # Windows: lock the first byte; LK_LOCK retries for ~10 s, then raises OSError
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def load_playbook(path: str | Path = DEFAULT_PLAYBOOK) -> Playbook:

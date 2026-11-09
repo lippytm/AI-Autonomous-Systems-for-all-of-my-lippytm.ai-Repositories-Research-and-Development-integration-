@@ -142,6 +142,20 @@ class PlaybookTests(unittest.TestCase):
                 first.learn(Pattern("lesson-two", "two", "d", "f", "node", "blocking", "two"))
             self.assertFalse(any(p.suffix == ".tmp" for p in Path(tmp).iterdir()))
 
+    def test_windows_lock_path_serialises_learners(self):
+        import sys
+        import types
+        calls = []
+        fake = types.SimpleNamespace(LK_LOCK=1, LK_UNLCK=0,
+                                     locking=lambda fd, mode, n: calls.append(mode))
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(sys.modules, {"fcntl": None, "msvcrt": fake}):
+            path = Path(tmp) / "playbook.json"
+            shutil.copy(DEFAULT_PLAYBOOK, path)
+            load_playbook(path).learn(Pattern("win-lesson", "w", "d", "f", "node", "blocking", "w"))
+            self.assertEqual("win-lesson", load_playbook(path).patterns[-1].id)
+        self.assertEqual([1, 0], calls)
+
     def test_diagnose_cli_exit_codes(self):
         with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as log:
             log.write("remote: Permission to a/b.git denied to github-actions[bot].\n")
