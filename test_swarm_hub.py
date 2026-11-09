@@ -376,6 +376,38 @@ class PreventionTests(unittest.TestCase):
                     "  second:\n    steps:\n      - run: pip install -r requirements.txt\n")
             self.assertEqual([], scan_text(text, "ci.yml", root))
 
+    def test_four_space_indented_jobs_use_their_own_permissions(self):
+        from swarm_hub.prevent import scan_text
+        text = ("permissions:\n    contents: write\n"
+                "jobs:\n"
+                "    locked:\n"
+                "        permissions: {contents: read}\n"
+                "        steps:\n"
+                "            - run: git push\n"
+                "    granted:\n"
+                "        permissions:\n            contents: write\n"
+                "        steps:\n"
+                "            - run: git push\n")
+        self.assertEqual([("push-without-write-permission", 7)],
+                         [(f.rule, f.line) for f in scan_text(text, "ci.yml")])
+
+    def test_comments_and_list_markers_do_not_confuse_working_directory(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backend").mkdir()
+            (root / "backend" / "requirements.txt").write_text("")
+            (root / "requirements.txt").write_text("")
+            text = ("jobs:\n  test:\n    steps:\n"
+                    "      - working-directory: backend\n"
+                    "# a column-zero comment inside the step\n"
+                    "        run: pip install -r requirements.txt\n"
+                    "      - run: pip install -r requirements.txt\n")
+            self.assertEqual([], scan_text(text, "ci.yml", root))
+            (root / "backend" / "requirements.txt").unlink()
+            self.assertEqual([("missing-referenced-file", 6)],
+                             [(f.rule, f.line) for f in scan_text(text, "ci.yml", root)])
+
     def test_this_repository_has_no_prevention_errors(self):
         from swarm_hub.prevent import scan_repository
         errors = [f for f in scan_repository(Path(__file__).parent) if f.severity == "error"]

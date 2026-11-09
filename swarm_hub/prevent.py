@@ -49,12 +49,23 @@ def _uses(text: str, pattern: str) -> list[tuple[int, str]]:
     return [(n, line.strip()) for n, line in enumerate(text.splitlines(), 1) if regex.match(line)]
 
 
+def _is_content(line: str) -> bool:
+    """Blank and comment-only lines never open or close a YAML block."""
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith("#")
+
+
+def _child_indent(lines: list[str], start: int, end: int, default: int) -> int:
+    """Indentation of the first real child line of the block at ``lines[start]``."""
+    return next((len(lines[i]) - len(lines[i].lstrip()) for i in range(start + 1, end)
+                 if _is_content(lines[i])), default)
+
+
 def _block_end(lines: list[str], start: int) -> int:
     """Index just past the YAML block whose key is on ``lines[start]``."""
     indent = len(lines[start]) - len(lines[start].lstrip())
     for j in range(start + 1, len(lines)):
-        if lines[j].strip() and not lines[j].lstrip().startswith("#") \
-                and len(lines[j]) - len(lines[j].lstrip()) <= indent:
+        if _is_content(lines[j]) and len(lines[j]) - len(lines[j].lstrip()) <= indent:
             return j
     return len(lines)
 
@@ -117,7 +128,7 @@ def _grants_at(text: str, line_no: int, scope: str) -> bool:
     job = _job_span(lines, line_no - 1)
     if job:
         start, end, indent = job
-        granted = _permissions_grant(lines, start + 1, end, indent + 2, scope)
+        granted = _permissions_grant(lines, start + 1, end, _child_indent(lines, start, end, indent + 2), scope)
         if granted is not None:
             return granted
     granted = _permissions_grant(lines, 0, len(lines), 0, scope)
@@ -160,7 +171,7 @@ def _indent(line: str) -> int:
 
 
 _STEP = re.compile(r"^(\s*)-\s+\S")
-_WORKDIR = re.compile(r"^\s*working-directory:\s*['\"]?([\w./-]+)")
+_WORKDIR = re.compile(r"^\s*(?:-\s+)?working-directory:\s*['\"]?([\w./-]+)")
 
 
 def _step_spans(lines: list[str]) -> list[tuple[int, int]]:
@@ -172,7 +183,7 @@ def _step_spans(lines: list[str]) -> list[tuple[int, int]]:
             continue
         indent, end = len(m.group(1)), len(lines)
         for j in range(i + 1, len(lines)):
-            if lines[j].strip() and _indent(lines[j]) <= indent:
+            if _is_content(lines[j]) and _indent(lines[j]) <= indent:
                 end = j
                 break
         spans.append((i, end))
