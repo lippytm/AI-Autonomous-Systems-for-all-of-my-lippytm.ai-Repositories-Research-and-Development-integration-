@@ -184,4 +184,73 @@ def selftest(rules: list[Rule] = RULES) -> list[str]:
             problems.append(f"{rule.id}: does not flag its bad example")
         if rule.check(rule.good, root):
             problems.append(f"{rule.id}: flags its good example")
+    for rule_id in AUTOFIXES:
+        rule = next((r for r in rules if r.id == rule_id), None)
+        if rule is None:
+            problems.append(f"autofix {rule_id}: no such rule")
+            continue
+        fixed, applied = autofix_text(rule.bad)
+        if rule_id not in applied or rule.check(fixed, Path(__file__).parent):
+            problems.append(f"autofix {rule_id}: does not clear its own bad example")
     return problems
+
+
+# ── Auto-fix ──────────────────────────────────────────────────────────────────
+# Only fixes that are a pure, local substitution are automatic. Structural edits
+# (adding permission blocks, pinning to a SHA that needs a network lookup) stay
+# findings for an agent or person, because a wrong YAML edit can break a workflow.
+
+_USES_PREFIX = r"(^\s*-?\s*uses:\s*['\"]?)"
+AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
+    "retired-artifact-action": [
+        (re.compile(_USES_PREFIX + r"(actions/(?:upload|download)-artifact)@v[123](?:\.[\d.]+)?", re.M),
+         r"\1\2@v4"),
+    ],
+    "codeql-action-v3": [
+        (re.compile(_USES_PREFIX + r"(github/codeql-action/[\w-]+)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
+    ],
+    "outdated-core-action": [
+        (re.compile(_USES_PREFIX + r"(actions/checkout)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
+        (re.compile(_USES_PREFIX + r"(actions/setup-python)@v[1234](?:\.[\d.]+)?", re.M), r"\1\2@v5"),
+        (re.compile(_USES_PREFIX + r"(actions/setup-node)@v[123](?:\.[\d.]+)?", re.M), r"\1\2@v4"),
+    ],
+}
+
+
+def autofix_text(text: str) -> tuple[str, list[str]]:
+    """Apply every automatic fix. Returns the new text and the rule ids applied."""
+    applied = []
+    for rule_id, substitutions in AUTOFIXES.items():
+        for regex, replacement in substitutions:
+            text, count = regex.subn(replacement, text)
+            if count:
+                applied.append(rule_id)
+    return text, sorted(set(applied))
+
+
+def autofix_repository(root: str | Path, write: bool = False) -> list[dict]:
+    """Fix workflow files under ``root``; verify each fixed rule no longer fires.
+
+    Returns one record per changed file with the unified diff. Raises if a fix
+    leaves its own finding behind, so a bad auto-fix can never be written.
+    """
+    import difflib
+
+    root = Path(root)
+    changes = []
+    workflows = root / ".github" / "workflows"
+    for path in sorted(workflows.glob("*.y*ml")) if workflows.is_dir() else []:
+        before = path.read_text(encoding="utf-8")
+        after, applied = autofix_text(before)
+        if after == before:
+            continue
+        remaining = {f.rule for f in scan_text(after, str(path), root)} & set(applied)
+        if remaining:
+            raise RuntimeError(f"{path}: auto-fix did not clear {sorted(remaining)}")
+        rel = str(path.relative_to(root))
+        diff = "".join(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                                            f"a/{rel}", f"b/{rel}"))
+        if write:
+            path.write_text(after, encoding="utf-8")
+        changes.append({"path": rel, "rules": applied, "diff": diff})
+    return changes

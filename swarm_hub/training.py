@@ -10,6 +10,7 @@ Four kinds of example:
 - ``diagnose``: a real CI log line becomes the cause and the fix (from playbook lessons)
 - ``prevent``: risky workflow source becomes the problem and the corrected source
 - ``no-problem``: correct source becomes "no problem found", so models learn not to over-flag
+- ``autofix``: risky source becomes the exact mechanical edit the swarm applies itself
 - ``guardrail``: a tempting shortcut becomes the reason it is wrong, and what to do instead
 """
 
@@ -19,7 +20,7 @@ import json
 from collections.abc import Iterator
 
 from .playbook import Playbook
-from .prevent import RULES, Rule
+from .prevent import AUTOFIXES, RULES, Rule, autofix_text
 
 SYSTEM = ("You are an AI Jarvis swarm repair agent. Diagnose CI failures and risky "
           "workflow code precisely, name the root cause, and give the smallest safe fix. "
@@ -80,6 +81,14 @@ def examples(playbook: Playbook, rules: list[Rule] = RULES) -> list[dict]:
             lesson=lesson.id, severity=lesson.severity, learned_from=lesson.learned_from))
     for rule in rules:
         out.extend(_rule_examples(rule))
+    for rule in rules:
+        if rule.id in AUTOFIXES:
+            fixed, _ = autofix_text(rule.bad)
+            out.append(_example(
+                "autofix",
+                f"Apply the safe automatic fix to this workflow excerpt and return only the result:"
+                f"\n\n```yaml\n{rule.bad}```",
+                f"```yaml\n{fixed}```", rule=rule.id))
     for question, answer in GUARDRAILS:
         out.append(_example("guardrail", question, answer))
     return out

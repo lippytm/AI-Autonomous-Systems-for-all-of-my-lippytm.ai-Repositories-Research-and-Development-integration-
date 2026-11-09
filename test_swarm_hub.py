@@ -279,6 +279,44 @@ class PreventionTests(unittest.TestCase):
             self.assertEqual("retired-artifact-action", json.loads(out.getvalue())[0]["rule"])
 
 
+class AutofixTests(unittest.TestCase):
+    def test_fixes_versions_and_keeps_everything_else(self):
+        from swarm_hub.prevent import autofix_text
+        text = ("      - uses: actions/upload-artifact@v3   # keep comment\n"
+                "      - uses: 'actions/setup-python@v4.7.1'\n"
+                "      - uses: github/codeql-action/analyze@v3\n"
+                "      - uses: actions/checkout@v4\n"
+                "      - run: echo actions/upload-artifact@v3 is only text here\n")
+        fixed, applied = autofix_text(text)
+        self.assertEqual(
+            "      - uses: actions/upload-artifact@v4   # keep comment\n"
+            "      - uses: 'actions/setup-python@v5'\n"
+            "      - uses: github/codeql-action/analyze@v4\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - run: echo actions/upload-artifact@v3 is only text here\n", fixed)
+        self.assertEqual(["codeql-action-v3", "outdated-core-action", "retired-artifact-action"], applied)
+        self.assertEqual((fixed, []), autofix_text(fixed))
+
+    def test_dry_run_then_write(self):
+        from swarm_hub.prevent import autofix_repository, scan_repository
+        with tempfile.TemporaryDirectory() as tmp:
+            workflows = Path(tmp) / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            path = workflows / "ci.yml"
+            path.write_text("    steps:\n      - uses: actions/upload-artifact@v3\n")
+            changes = autofix_repository(tmp)
+            self.assertIn("+      - uses: actions/upload-artifact@v4", changes[0]["diff"])
+            self.assertIn("@v3", path.read_text())
+            autofix_repository(tmp, write=True)
+            self.assertEqual([], scan_repository(tmp))
+            self.assertEqual([], autofix_repository(tmp))
+
+    def test_structural_problems_are_not_auto_fixed(self):
+        from swarm_hub.prevent import autofix_text
+        text = "      - uses: peter-evans/create-pull-request@v6\n"
+        self.assertEqual((text, []), autofix_text(text))
+
+
 class TrainingTests(unittest.TestCase):
     def test_dataset_covers_every_lesson_and_rule(self):
         from swarm_hub.prevent import RULES
@@ -290,6 +328,8 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(len(RULES), kinds.count("prevent"))
         self.assertEqual(len(RULES), kinds.count("no-problem"))
         self.assertEqual(len(GUARDRAILS), kinds.count("guardrail"))
+        from swarm_hub.prevent import AUTOFIXES
+        self.assertEqual(len(AUTOFIXES), kinds.count("autofix"))
         for item in data:
             self.assertEqual(["system", "user", "assistant"], [m["role"] for m in item["messages"]])
             self.assertTrue(all(m["content"].strip() for m in item["messages"]))

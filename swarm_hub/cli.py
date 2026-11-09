@@ -6,6 +6,7 @@
   python -m swarm_hub route CAPABILITY TEXT    show which agents a task would go to
   python -m swarm_hub learn --id ... (see -h)  teach the swarm a new failure pattern
   python -m swarm_hub prevent [REPO ...]       find known failure causes before CI runs
+  python -m swarm_hub autofix [REPO ...] [--write]  apply safe mechanical fixes (dry run by default)
   python -m swarm_hub export-training [-o F]   write verified knowledge as JSONL training data
   python -m swarm_hub health                   latest default-branch CI per repo (network)
   python -m swarm_hub prs [--repo ID]          triage open PRs fleet-wide (network)
@@ -23,7 +24,7 @@ from .bus import Bus
 from .fleet import load_fleet
 from .github import GitHub, GitHubError
 from .playbook import SEVERITIES, Pattern, load_playbook
-from .prevent import RULES, scan_repository
+from .prevent import RULES, autofix_repository, scan_repository
 from .prevent import selftest as prevent_selftest
 from .training import examples, to_jsonl
 from .triage import ACTIONS, triage
@@ -113,6 +114,21 @@ def _prevent(args):
     return 2 if any(f["severity"] == "error" for f in findings) else 0
 
 
+def _autofix(args):
+    total = 0
+    for root in args.repos or ["."]:
+        for change in autofix_repository(root, write=args.write):
+            total += 1
+            print(change["diff"], end="")
+            verb = "fixed" if args.write else "would fix"
+            print(f"# {verb} {root}/{change['path']}: {', '.join(change['rules'])}\n")
+    if not total:
+        print("Nothing to auto-fix.")
+    elif not args.write:
+        print("Dry run. Re-run with --write to apply, then review the diff and run the repo's checks.")
+    return 0
+
+
 def _export_training(args):
     data = to_jsonl(examples(load_playbook()))
     if args.output == "-":
@@ -190,6 +206,10 @@ def main(argv=None) -> int:
     p.add_argument("repos", nargs="*", help="repository roots (default: .)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=_prevent)
+    p = sub.add_parser("autofix")
+    p.add_argument("repos", nargs="*", help="repository roots (default: .)")
+    p.add_argument("--write", action="store_true", help="apply the fixes (default: show diff only)")
+    p.set_defaults(func=_autofix)
     p = sub.add_parser("export-training")
     p.add_argument("-o", "--output", default="-")
     p.set_defaults(func=_export_training)

@@ -32,6 +32,9 @@ jobs:
       - name: Prevention scan (this repo)
         run: python -m swarm_hub prevent | tee reports/prevent.txt
 
+      - name: Auto-fix proposals (dry run, never written)
+        run: python -m swarm_hub autofix | tee reports/autofix.diff
+
       - name: Default-branch CI health
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -14,6 +14,7 @@ python -m swarm_hub route lint "fix E501" # which agents a task goes to
 GITHUB_TOKEN=... python -m swarm_hub health   # latest default-branch CI per repo
 GITHUB_TOKEN=... python -m swarm_hub prs      # triage every open PR fleet-wide
 python -m swarm_hub prevent ../repo-a ../repo-b  # find failure causes before CI runs them
+python -m swarm_hub autofix ../repo-a [--write]  # apply safe mechanical fixes (dry run by default)
 python -m swarm_hub export-training -o training/swarm_repair.jsonl
 ```
 
@@ -70,6 +71,18 @@ from 2026-11-09 before it would have run. Run against the fleet, they found two
 problems that had not yet failed: tower-control's CodeQL v3 (which would break in
 December) and an unpinned `trivy-action@master` in AI-Time-Machines. Both are now fixed.
 
+### Auto-fix
+
+`autofix` applies the fixes that are pure, local substitutions: retired artifact
+actions → v4, CodeQL v3 → v4, and outdated checkout/setup-python/setup-node versions.
+By default it prints the diff; `--write` applies it. Before anything is written, it
+re-scans the result and refuses to write if the fixed rule still fires, and `selftest`
+proves every auto-fix clears its rule's own bad example. Structural problems (missing
+permission blocks, pinning to a commit SHA) are deliberately not automatic. They stay
+findings for an agent or person, because a wrong automated YAML edit can break a
+workflow. The daily patrol runs auto-fix as a dry run and attaches the proposed diff
+to its report.
+
 When you add a lesson whose cause is visible in source, add a rule with it, and set
 `prevents` to the lesson's id.
 
@@ -82,6 +95,7 @@ Copilot, Jarvis):
 
 - `diagnose`: real CI log line → cause, fix, owner (one per lesson)
 - `prevent`: risky workflow excerpt → problem and corrected excerpt (one per rule)
+- `autofix`: risky excerpt → the exact edit the swarm applies itself
 - `no-problem`: correct excerpt → "no problem found", so agents learn not to over-flag
 - `guardrail`: tempting shortcut ("delete the check", "skip the test") → why not, and what to do
 
