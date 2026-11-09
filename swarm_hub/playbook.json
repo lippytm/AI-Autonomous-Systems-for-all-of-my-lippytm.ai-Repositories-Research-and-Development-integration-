@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "patterns": [
+    {
+      "id": "deprecated-artifact-action",
+      "match": "deprecated version of `?actions/(upload|download)-artifact: ?v[123]",
+      "diagnosis": "The workflow pins actions/upload-artifact or download-artifact v1-v3, which GitHub retired. The job is failed during 'Set up job' before any step runs.",
+      "fix": "Change the action to actions/upload-artifact@v4 (or download-artifact@v4). v4 artifacts are immutable, so give each upload a unique name.",
+      "capability": "workflows",
+      "severity": "blocking",
+      "example": "##[error]This request has been automatically failed because it uses a deprecated version of `actions/upload-artifact: v3`.",
+      "learned_from": "lippytm/AI-Autonomous-Systems-...-integration- 'AI Autonomous Improvements' run 42437046500"
+    },
+    {
+      "id": "missing-requirements-file",
+      "match": "(Could not open requirements file|No such file or directory: '?requirements\\.txt)",
+      "diagnosis": "The workflow installs from requirements.txt, but the file is not in the repository.",
+      "fix": "Commit the requirements file, or remove the install step if the code uses only the standard library.",
+      "capability": "python",
+      "severity": "blocking",
+      "example": "ERROR: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'",
+      "learned_from": "lippytm/AI-Autonomous-Systems-...-integration- chatgpt-integration.yml"
+    },
+    {
+      "id": "flake8-violations",
+      "match": "^\\S+\\.py:\\d+:\\d+: [EWF]\\d{3} ",
+      "diagnosis": "flake8 reported style or correctness violations, so the lint step exits 1 and the tests never run.",
+      "fix": "Run `flake8 .` locally and fix each reported line. Do not widen the ignore list to hide F-codes (real bugs such as unused imports and undefined names).",
+      "capability": "lint",
+      "severity": "blocking",
+      "example": "./bots/marvin_dca_bot.py:140:15: F541 f-string is missing placeholders",
+      "learned_from": "lippytm/Factory.ai CI, bots/marvin_dca_bot.py"
+    },
+    {
+      "id": "actions-push-denied",
+      "match": "Permission to \\S+ denied to github-actions\\[bot\\]",
+      "diagnosis": "The workflow pushes a branch or opens a PR, but its GITHUB_TOKEN is read-only.",
+      "fix": "Add `permissions: {contents: write, pull-requests: write}` to the workflow. To open PRs, the owner must also allow 'GitHub Actions to create and approve pull requests' under Settings > Actions > General.",
+      "capability": "workflows",
+      "severity": "blocking",
+      "example": "remote: Permission to lippytm/AI-Time-Machines.git denied to github-actions[bot].",
+      "learned_from": "lippytm/AI-Time-Machines 'Dependency Updates' run 42540671186 (fix in PR #50)"
+    },
+    {
+      "id": "dependency-graph-disabled",
+      "match": "Dependency review is not supported on this repository",
+      "diagnosis": "actions/dependency-review-action needs the repository's Dependency graph, which is turned off. Every PR fails this check, including Dependabot PRs.",
+      "fix": "Owner setting, not code: Settings > Code security > enable 'Dependency graph' (free for public repositories). Do not delete the check to make CI green.",
+      "capability": "owner",
+      "severity": "blocking",
+      "example": "##[error]Dependency review is not supported on this repository. Please ensure that Dependency graph is enabled",
+      "learned_from": "lippytm/AI-Time-Machines PR #50 and lippytm/lippytm-lippytm.ai-tower-control-ai Dependabot PRs"
+    },
+    {
+      "id": "github-api-rate-limit",
+      "match": "(GitHub returned HTTP 403|API rate limit exceeded|rate limit exhausted)",
+      "diagnosis": "An unauthenticated GitHub API call ran on a shared Actions runner and hit the 60 requests/hour limit. Failures are intermittent.",
+      "fix": "Send the job's read-only `${{ github.token }}` with the request (1,000 requests/hour per repository) and keep the job's permissions at contents: read.",
+      "capability": "patrol",
+      "severity": "flaky",
+      "example": "jarvis.github_inventory.GitHubInventoryError: GitHub returned HTTP 403",
+      "learned_from": "lippytm/AI-Jarvis-Assistant-...-DOG-Dog-dog- jarvis-audit run 42385791995"
+    },
+    {
+      "id": "missing-python-module",
+      "match": "ModuleNotFoundError: No module named '([\\w.]+)'",
+      "diagnosis": "A test or script imports a package that the CI install step did not install, or that was installed for a different interpreter.",
+      "fix": "Add the package to the install step or project dependencies, and run tools as `python -m pytest` so they use the same interpreter as `pip`.",
+      "capability": "python",
+      "severity": "blocking",
+      "example": "E   ModuleNotFoundError: No module named 'yaml'",
+      "learned_from": "Factory.ai local reproduction (PyYAML)"
+    },
+    {
+      "id": "merge-conflict",
+      "match": "mergeable_state[\"=: ]+dirty",
+      "diagnosis": "The pull request conflicts with its base branch.",
+      "fix": "Rebase or merge the base branch into the PR branch and resolve the conflicts. If the PR is stale and superseded, close it with a note naming its replacement.",
+      "capability": "triage",
+      "severity": "blocking",
+      "example": "\"mergeable_state\": \"dirty\"",
+      "learned_from": "Fleet PR review 2026-11-09"
+    },
+    {
+      "id": "sarif-upload-permission",
+      "match": "Resource not accessible by integration",
+      "diagnosis": "A step that writes to the GitHub API (most often codeql-action/upload-sarif) runs with a token that lacks the needed permission.",
+      "fix": "Grant only the missing scope on that job, e.g. 'security-events: write' for SARIF uploads. Never switch the whole workflow to write-all.",
+      "capability": "workflows",
+      "severity": "blocking",
+      "example": "##[error]Resource not accessible by integration - https://docs.github.com/rest",
+      "learned_from": "lippytm/AI-Time-Machines 'Continuous Integration' run 32590430517"
+    },
+    {
+      "id": "template-schema-mismatch",
+      "match": "Missing required keys: \\[",
+      "diagnosis": "A manifest under templates/ does not satisfy the template validator's schema.",
+      "fix": "If the manifest is buildable, add the missing keys with real values. If it is design-only, mark it 'status: architecture_only' so it is checked against the architecture schema. Never add placeholder deployment fields.",
+      "capability": "templates",
+      "severity": "blocking",
+      "example": "    - Missing required keys: ['components', 'deployment', 'description', 'version']",
+      "learned_from": "lippytm/Factory.ai 'Validate Templates' run 32590424140"
+    }
+  ]
+}
