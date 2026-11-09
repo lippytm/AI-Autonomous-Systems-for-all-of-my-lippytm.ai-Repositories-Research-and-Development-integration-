@@ -70,6 +70,9 @@ def _permissions_grant(lines: list[str], start: int, end: int, indent: int, scop
         if not m:
             continue
         inline = (m.group(1) or "").split("#")[0].strip()
+        if inline.startswith("{") and inline.endswith("}"):  # flow mapping: {contents: write, ...}
+            pairs = dict(part.split(":", 1) for part in inline[1:-1].split(",") if ":" in part)
+            return {k.strip(): v.strip() for k, v in pairs.items()}.get(scope) == "write"
         if inline:
             return inline == "write-all"
         for j in range(i + 1, _block_end(lines, i)):
@@ -186,11 +189,18 @@ def _effective_workdir(lines: list[str], index: int, spans: list[tuple[int, int]
             if m:
                 return m.group(1)
     inside_steps = {j for s, e in spans for j in range(s, e)}
-    for j in range(index - 1, -1, -1):  # nearest job- or workflow-level default above
-        if j not in inside_steps:
-            m = _WORKDIR.match(lines[j])
-            if m:
-                return m.group(1)
+    job = _job_span(lines, index)
+    if job:  # job-level defaults: inside this job, outside every step
+        for j in range(job[0], job[1]):
+            if j not in inside_steps:
+                m = _WORKDIR.match(lines[j])
+                if m:
+                    return m.group(1)
+    jobs = next((i for i, line in enumerate(lines) if re.match(r"^jobs:\s*(#.*)?$", line)), len(lines))
+    for j in range(0, jobs):  # workflow-level defaults, before `jobs:`
+        m = _WORKDIR.match(lines[j])
+        if m:
+            return m.group(1)
     return None
 
 

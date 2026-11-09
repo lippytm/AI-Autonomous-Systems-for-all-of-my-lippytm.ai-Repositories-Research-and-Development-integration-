@@ -10,7 +10,9 @@ recognises the failure it was learned from. When an agent solves a new problem,
 from __future__ import annotations
 
 import json
+import os
 import re
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -79,12 +81,20 @@ class Playbook:
         missing = [name for name in _REQUIRED if not str(getattr(pattern, name)).strip()]
         if missing:
             raise ValueError(f"{pattern.id}: missing {', '.join(missing)}")
-        if any(p.id == pattern.id for p in self.patterns):
-            raise ValueError(f"Pattern already known: {pattern.id}")
         if not pattern.regex.search(pattern.example):
             raise ValueError(f"{pattern.id}: regex does not match its own example")
-        self.patterns.append(pattern)
-        if save and self.path:
+        if not (save and self.path):
+            if any(p.id == pattern.id for p in self.patterns):
+                raise ValueError(f"Pattern already known: {pattern.id}")
+            self.patterns.append(pattern)
+            return
+        # Several agents may learn at once: lock, reload what is on disk now,
+        # then append and replace the file atomically, so no lesson is lost.
+        with _locked(self.path):
+            self.patterns = load_playbook(self.path).patterns
+            if any(p.id == pattern.id for p in self.patterns):
+                raise ValueError(f"Pattern already known: {pattern.id}")
+            self.patterns.append(pattern)
             self.save()
 
     def selftest(self) -> list[str]:
@@ -97,7 +107,25 @@ class Playbook:
 
     def save(self) -> None:
         data = {"version": 1, "patterns": [asdict(p) for p in self.patterns]}
-        self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, self.path)  # readers never see a half-written playbook
+
+
+@contextmanager
+def _locked(path: Path):
+    """Exclusive inter-process lock beside ``path`` (advisory; no-op without fcntl)."""
+    with open(path.with_name(path.name + ".lock"), "w") as handle:
+        try:
+            import fcntl
+        except ImportError:  # Windows: best effort, atomic replace still applies
+            yield
+            return
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def load_playbook(path: str | Path = DEFAULT_PLAYBOOK) -> Playbook:

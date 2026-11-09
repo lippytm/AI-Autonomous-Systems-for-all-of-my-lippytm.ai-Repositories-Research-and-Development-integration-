@@ -129,6 +129,19 @@ class PlaybookTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Pattern("ok-id", "x", "d", "f", "c", "catastrophic", "x")
 
+    def test_concurrent_learners_never_lose_a_lesson(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "playbook.json"
+            shutil.copy(DEFAULT_PLAYBOOK, path)
+            first, second = load_playbook(path), load_playbook(path)  # both read the same snapshot
+            first.learn(Pattern("lesson-one", "one", "d", "f", "node", "blocking", "one"))
+            second.learn(Pattern("lesson-two", "two", "d", "f", "node", "blocking", "two"))
+            ids = [p.id for p in load_playbook(path).patterns]
+            self.assertEqual(["lesson-one", "lesson-two"], ids[-2:])
+            with self.assertRaisesRegex(ValueError, "already known"):
+                first.learn(Pattern("lesson-two", "two", "d", "f", "node", "blocking", "two"))
+            self.assertFalse(any(p.suffix == ".tmp" for p in Path(tmp).iterdir()))
+
     def test_diagnose_cli_exit_codes(self):
         with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as log:
             log.write("remote: Permission to a/b.git denied to github-actions[bot].\n")
@@ -328,6 +341,26 @@ class PreventionTests(unittest.TestCase):
                 "  all:\n    permissions: write-all\n    steps:\n      - run: git push\n")
         self.assertEqual([("push-without-write-permission", 11)],
                          [(f.rule, f.line) for f in scan_text(text, "ci.yml")])
+
+    def test_flow_style_permissions_are_recognised(self):
+        from swarm_hub.prevent import scan_text
+        text = ("permissions: {contents: write, pull-requests: write}\n"
+                "jobs:\n  update:\n    steps:\n      - uses: peter-evans/create-pull-request@v6\n"
+                "  scan:\n    permissions: { contents: read }\n"
+                "    steps:\n      - uses: github/codeql-action/upload-sarif@v4\n")
+        self.assertEqual(["sarif-without-permission"], [f.rule for f in scan_text(text, "ci.yml")])
+
+    def test_working_directory_defaults_do_not_leak_between_jobs(self):
+        from swarm_hub.prevent import scan_text
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app").mkdir()
+            (root / "requirements.txt").write_text("")
+            text = ("jobs:\n"
+                    "  first:\n    defaults:\n      run:\n        working-directory: app\n"
+                    "    steps:\n      - run: echo hi\n"
+                    "  second:\n    steps:\n      - run: pip install -r requirements.txt\n")
+            self.assertEqual([], scan_text(text, "ci.yml", root))
 
     def test_this_repository_has_no_prevention_errors(self):
         from swarm_hub.prevent import scan_repository
