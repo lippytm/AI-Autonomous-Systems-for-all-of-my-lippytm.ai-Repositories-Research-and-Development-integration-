@@ -242,7 +242,8 @@ RULES = [
     Rule("retired-artifact-action", "error", "deprecated-artifact-action",
          "actions/upload-artifact or download-artifact v1-v3 is retired; GitHub fails the job at 'Set up job'.",
          "Use @v4 and give each upload a unique name.",
-         "      - uses: actions/upload-artifact@v3\n", "      - uses: actions/upload-artifact@v4\n",
+         "      - uses: actions/upload-artifact@v3\n        with:\n          name: reports\n",
+         "      - uses: actions/upload-artifact@v4\n        with:\n          name: reports\n",
          _check_retired_artifact),
     Rule("missing-referenced-file", "error", "missing-requirements-file",
          "The workflow runs or installs a file that does not exist in the repository.",
@@ -357,10 +358,43 @@ AUTOFIXES: dict[str, list[tuple[re.Pattern[str], str]]] = {
 }
 
 
+_UPLOAD = re.compile(r"^\s*-?\s*uses:\s*['\"]?actions/upload-artifact@")
+_ARTIFACT_NAME = re.compile(r"^\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(#.*)?$")
+
+
+def _artifact_upgrade_is_safe(text: str) -> bool:
+    """v4 artifacts are immutable: two uploads with one name in a run fail.
+
+    Only upgrade when every upload in the file sets its own distinct name, and,
+    in a workflow with a matrix, that name varies per leg (contains ``${{``).
+    Anything else needs a person or agent to migrate names and consumers.
+    """
+    lines = text.splitlines()
+    spans = _step_spans(lines)
+    has_matrix = bool(re.search(r"^\s*matrix:", text, re.M))
+    names = []
+    for i, line in enumerate(lines):
+        if not _UPLOAD.match(line):
+            continue
+        uses_indent = _indent(line) + (2 if line.lstrip().startswith("-") else 0)
+        span = max((s for s in spans if s[0] <= i < s[1]), default=(i, i + 1))
+        name = None
+        for j in range(span[0], span[1]):  # the artifact name lives under `with:`
+            m = _ARTIFACT_NAME.match(lines[j])
+            if m and _indent(lines[j]) > uses_indent:
+                name = m.group(1).strip()
+        if name is None or (has_matrix and "${{" not in name):
+            return False
+        names.append(name)
+    return len(names) == len(set(names))
+
+
 def autofix_text(text: str) -> tuple[str, list[str]]:
     """Apply every automatic fix. Returns the new text and the rule ids applied."""
     applied = []
     for rule_id, substitutions in AUTOFIXES.items():
+        if rule_id == "retired-artifact-action" and not _artifact_upgrade_is_safe(text):
+            continue  # stays a finding: names and consumers need a real migration
         for regex, replacement in substitutions:
             text, count = regex.subn(replacement, text)
             if count:

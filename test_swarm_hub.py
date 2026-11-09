@@ -428,6 +428,7 @@ class AutofixTests(unittest.TestCase):
     def test_fixes_versions_and_keeps_everything_else(self):
         from swarm_hub.prevent import autofix_text
         text = ("      - uses: actions/upload-artifact@v3   # keep comment\n"
+                "        with:\n          name: reports\n"
                 "      - uses: 'actions/setup-python@v4.7.1'\n"
                 "      - uses: github/codeql-action/analyze@v3\n"
                 "      - uses: actions/checkout@v4\n"
@@ -435,6 +436,7 @@ class AutofixTests(unittest.TestCase):
         fixed, applied = autofix_text(text)
         self.assertEqual(
             "      - uses: actions/upload-artifact@v4   # keep comment\n"
+            "        with:\n          name: reports\n"
             "      - uses: 'actions/setup-python@v5'\n"
             "      - uses: github/codeql-action/analyze@v4\n"
             "      - uses: actions/checkout@v4\n"
@@ -448,7 +450,8 @@ class AutofixTests(unittest.TestCase):
             workflows = Path(tmp) / ".github" / "workflows"
             workflows.mkdir(parents=True)
             path = workflows / "ci.yml"
-            path.write_text("    steps:\n      - uses: actions/upload-artifact@v3\n")
+            path.write_text("    steps:\n      - uses: actions/upload-artifact@v3\n"
+                            "        with:\n          name: reports\n")
             changes = autofix_repository(tmp)
             self.assertIn("+      - uses: actions/upload-artifact@v4", changes[0]["diff"])
             self.assertIn("@v3", path.read_text())
@@ -466,6 +469,34 @@ class AutofixTests(unittest.TestCase):
                          "      - uses: actions/checkout@v10\n"
                          "      - uses: actions/setup-node@v4\n", fixed)
         self.assertEqual(["outdated-core-action"], applied)
+
+    def test_artifact_upgrade_skipped_when_v4_would_collide(self):
+        from swarm_hub.prevent import autofix_text
+        upload = "      - uses: actions/upload-artifact@v3\n"
+        unsafe = {
+            "unnamed": upload,
+            "duplicate names": (upload + "        with:\n          name: logs\n"
+                                + upload + "        with:\n          name: logs\n"),
+            "matrix without per-leg name": ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
+                                            + upload + "        with:\n          name: logs\n"),
+        }
+        for label, text in unsafe.items():
+            with self.subTest(label):
+                self.assertEqual((text, []), autofix_text(text))
+        per_leg = ("    strategy:\n      matrix:\n        py: [3.11, 3.12]\n"
+                   + upload + "        with:\n          name: logs-${{ matrix.py }}\n")
+        self.assertEqual(["retired-artifact-action"], autofix_text(per_leg)[1])
+        distinct = (upload + "        with:\n          name: a\n" + upload + "        with:\n          name: b\n")
+        self.assertNotIn("@v3", autofix_text(distinct)[0])
+
+    def test_skipped_artifact_upgrade_still_reported(self):
+        from swarm_hub.prevent import autofix_repository, scan_repository
+        with tempfile.TemporaryDirectory() as tmp:
+            workflows = Path(tmp) / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text("      - uses: actions/upload-artifact@v3\n")
+            self.assertEqual([], autofix_repository(tmp, write=True))
+            self.assertEqual(["retired-artifact-action"], [f.rule for f in scan_repository(tmp)])
 
     def test_structural_problems_are_not_auto_fixed(self):
         from swarm_hub.prevent import autofix_text
